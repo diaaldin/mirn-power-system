@@ -205,9 +205,9 @@ void main() {
           subtotal: 1000.0,
           vatRate: 0.17,
           vatAmount: 170.0,
-          totalAmount: 1000.0,
+          totalAmount: 1170.0,
           paidAmount: -200.0,
-          onAccountAmount: 1200.0,
+          onAccountAmount: 1370.0,
           createdBy: 'admin-01',
         ),
         throwsA(isA<ArgumentError>()),
@@ -235,9 +235,41 @@ void main() {
           subtotal: 1000.0,
           vatRate: 0.17,
           vatAmount: 170.0,
-          totalAmount: 1000.0,
-          paidAmount: 1200.0,
+          totalAmount: 1170.0,
+          paidAmount: 1370.0,
           onAccountAmount: -200.0,
+          createdBy: 'admin-01',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects invoice when subtotal + vatAmount does not equal totalAmount', () {
+      expect(
+        () => PurchaseInvoice(
+          id: 'pur-003-vat',
+          invoiceNumber: 'PUR-2026-00003-VAT',
+          date: DateTime(2026, 11, 14),
+          supplierId: 'supp-201',
+          supplierName: 'محاجر القدس',
+          supplierTaxId: '514882109',
+          items: [
+            PurchaseLineItem(
+              productId: 'prod-001',
+              productName: 'رخام',
+              unitType: UnitType.box,
+              quantity: 10,
+              unitCost: 100.0,
+              subtotal: 1000.0,
+              convertedStockQuantity: 14.4,
+            ),
+          ],
+          subtotal: 1000.0,
+          vatRate: 0.17,
+          vatAmount: 170.0,
+          totalAmount: 1200.0, // 1000 + 170 = 1170 != 1200
+          paidAmount: 1200.0,
+          onAccountAmount: 0.0,
           createdBy: 'admin-01',
         ),
         throwsA(isA<ArgumentError>()),

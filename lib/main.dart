@@ -2069,6 +2069,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                                   unitCost: currentUnitCost,
                                 ),
                               );
+                              quantityCtrl.text = '';
                               validationError = null;
                             });
                           },

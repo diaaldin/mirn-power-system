@@ -149,11 +149,17 @@ class PurchaseInvoice {
         'On-account amount cannot be negative',
       );
     }
-    final diff =
+    final splitDiff =
         (this.paidAmount + this.onAccountAmount - this.totalAmount).abs();
-    if (diff >= 0.01) {
+    if (splitDiff >= 0.01) {
       throw ArgumentError(
         'Payment split does not balance with total: paidAmount ($paidAmount) + onAccountAmount ($onAccountAmount) != totalAmount ($totalAmount)',
+      );
+    }
+    final totalDiff = (this.subtotal + this.vatAmount - this.totalAmount).abs();
+    if (totalDiff >= 0.01) {
+      throw ArgumentError(
+        'Invoice total does not balance with subtotal + VAT: subtotal ($subtotal) + vatAmount ($vatAmount) != totalAmount ($totalAmount)',
       );
     }
   }

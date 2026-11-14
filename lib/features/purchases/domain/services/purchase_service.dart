@@ -200,7 +200,7 @@ class PurchaseService {
       statementEntry = StatementEntry(
         id: 'stmt-${input.invoiceNumber}',
         contactId: input.supplier.id,
-        contactType: ContactType.supplier,
+        contactType: input.supplier.type,
         date: input.date,
         type: StatementEntryType.purchaseInvoice,
         referenceNumber: input.invoiceNumber,
