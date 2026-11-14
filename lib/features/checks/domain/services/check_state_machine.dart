@@ -104,9 +104,10 @@ class CheckStateMachine {
     StatementEntry? statementEntry;
 
     // Bounce protection: When a received customer check bounces, restore customer debt
-    if (targetStatus == CheckStatus.bounced &&
-        check.type == CheckType.received &&
-        contact != null) {
+    if (targetStatus == CheckStatus.bounced && check.type == CheckType.received) {
+      if (contact == null) {
+        throw ArgumentError('Customer contact is required to bounce a received customer check');
+      }
       final double newBalance =
           ((contact.currentBalance + check.amount) * 100).roundToDouble() / 100.0;
 

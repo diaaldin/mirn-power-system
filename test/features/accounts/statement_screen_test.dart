@@ -153,5 +153,52 @@ void main() {
       expect(updatedCheck1.status, equals(CheckStatus.deposited));
       expect(controller.totalDepositedAmount, equals(5000.0));
     });
+    test('includes transactions on end date with timestamps and computes opening balance (IMP-4 & IMP-5)', () {
+      final entriesWithTime = [
+        StatementEntry(
+          id: 'st-early',
+          contactId: customer.id,
+          contactType: ContactType.customer,
+          date: DateTime(2026, 10, 15),
+          type: StatementEntryType.saleInvoice,
+          referenceNumber: 'INV-OCT-1',
+          debit: 1000.0,
+          credit: 0.0,
+          runningBalance: 1000.0,
+          description: 'October Order',
+        ),
+        StatementEntry(
+          id: 'st-end-date',
+          contactId: customer.id,
+          contactType: ContactType.customer,
+          date: DateTime(2026, 11, 15, 14, 30), // 2:30 PM on Nov 15
+          type: StatementEntryType.paymentReceipt,
+          referenceNumber: 'REC-2026-00005',
+          debit: 0.0,
+          credit: 500.0,
+          runningBalance: 500.0,
+          description: 'Payment on Nov 15 afternoon',
+        ),
+      ];
+
+      final controller = StatementScreenController(
+        contact: customer,
+        allEntries: entriesWithTime,
+      );
+
+      controller.setDateFilter(
+        fromDate: DateTime(2026, 11, 1),
+        toDate: DateTime(2026, 11, 15), // Midnight start of Nov 15
+      );
+
+      final filtered = controller.getFilteredEntries();
+      // Should include the Nov 15 14:30 entry!
+      expect(filtered.length, equals(1));
+      expect(filtered.first.referenceNumber, equals('REC-2026-00005'));
+
+      final totals = controller.getTotals();
+      expect(totals.openingBalance, equals(1000.0));
+      expect(totals.totalCredits, equals(500.0));
+    });
   });
 }

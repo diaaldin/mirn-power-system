@@ -168,6 +168,11 @@ class SalesPosController {
           boxes: input.quantity,
           meterPerBox: input.product.meterPerBox ?? 1.0,
         );
+      } else if (input.product.unitType == UnitType.box && input.unit == UnitType.meter) {
+        effectiveQty = UnitConverter.metersToBoxes(
+          meters: input.quantity,
+          meterPerBox: input.product.meterPerBox ?? 1.0,
+        );
       }
 
       double itemSubtotal;

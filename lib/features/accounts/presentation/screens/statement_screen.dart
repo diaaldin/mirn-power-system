@@ -5,11 +5,13 @@ import '../../domain/models/contact.dart';
 import '../../domain/models/statement_entry.dart';
 
 class StatementTotals {
+  final double openingBalance;
   final double totalDebits;
   final double totalCredits;
   final double closingBalance;
 
   const StatementTotals({
+    this.openingBalance = 0.0,
     required this.totalDebits,
     required this.totalCredits,
     required this.closingBalance,
@@ -29,7 +31,12 @@ class StatementScreenController {
 
   void setDateFilter({DateTime? fromDate, DateTime? toDate}) {
     _fromDate = fromDate;
-    _toDate = toDate;
+    if (toDate != null) {
+      // Adjust to end of the day to include transactions with time components
+      _toDate = DateTime(toDate.year, toDate.month, toDate.day, 23, 59, 59, 999);
+    } else {
+      _toDate = null;
+    }
   }
 
   void clearFilter() {
@@ -51,6 +58,15 @@ class StatementScreenController {
   }
 
   StatementTotals getTotals() {
+    double opening = 0.0;
+    if (_fromDate != null) {
+      final priorEntries = _allEntries.where((e) => e.date.isBefore(_fromDate!)).toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      if (priorEntries.isNotEmpty) {
+        opening = priorEntries.last.runningBalance;
+      }
+    }
+
     final filtered = getFilteredEntries();
     double debits = 0.0;
     double credits = 0.0;
@@ -65,9 +81,10 @@ class StatementScreenController {
 
     final double closing = filtered.isNotEmpty
         ? filtered.last.runningBalance
-        : contact.currentBalance;
+        : (opening > 0 ? opening : contact.currentBalance);
 
     return StatementTotals(
+      openingBalance: opening,
       totalDebits: debits,
       totalCredits: credits,
       closingBalance: closing,

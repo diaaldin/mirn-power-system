@@ -126,5 +126,20 @@ void main() {
         throwsA(isA<InvalidStateTransitionException>()),
       );
     });
+    test('bouncing a received check requires customer contact (CRIT-3)', () {
+      final deposited = CheckStateMachine.transition(
+        check: check,
+        targetStatus: CheckStatus.deposited,
+      );
+
+      expect(
+        () => CheckStateMachine.transition(
+          check: deposited.updatedCheck,
+          targetStatus: CheckStatus.bounced,
+          contact: null, // missing contact!
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 }

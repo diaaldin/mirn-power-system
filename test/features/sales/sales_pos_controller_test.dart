@@ -124,5 +124,34 @@ void main() {
       expect(warning.exceededAmount, equals(1340.0));
       expect(warning.canProceed, isTrue);
     });
+    test('converts quantities when product is stocked in boxes and customer orders in square meters (IMP-6)', () {
+      final boxTile = Product(
+        id: 'prod-box',
+        name: 'Bathroom Wall Tiles',
+        sku: 'TL-BATH',
+        category: ProductCategory.sanitary,
+        unitType: UnitType.box,
+        meterPerBox: 1.5, // 1.5 m2 per box
+        purchaseCost: 40.0,
+        sellingPrice: 60.0, // ₪60 per box
+        currentStock: 50.0, // 50 boxes
+      );
+
+      final controller = SalesPosController();
+      controller.setPricingMode(isTaxInclusive: false);
+
+      // Customer orders 15 square meters -> 15 / 1.5 = 10 boxes
+      controller.addItem(
+        product: boxTile,
+        quantity: 15.0,
+        unit: UnitType.meter,
+        unitPriceInput: 60.0,
+      );
+
+      final state = controller.state;
+      expect(state.items.length, equals(1));
+      // 10 boxes * ₪60 = ₪600 subtotal
+      expect(state.subtotal, equals(600.0));
+    });
   });
 }

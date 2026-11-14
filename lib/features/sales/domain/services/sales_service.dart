@@ -2,8 +2,10 @@ import '../../../inventory/domain/models/product.dart';
 import '../../../inventory/domain/services/unit_converter.dart';
 import '../../../accounts/domain/models/contact.dart';
 import '../../../accounts/domain/models/statement_entry.dart';
+import '../../../checks/domain/models/check_record.dart';
 import '../models/payment_split.dart';
 import '../models/sale_invoice.dart';
+import 'vat_calculator.dart';
 
 class InvalidPaymentTotalException implements Exception {
   final double expectedTotal;
@@ -17,17 +19,29 @@ class InvalidPaymentTotalException implements Exception {
   }
 }
 
+class InvalidPaymentAmountException implements Exception {
+  final double amount;
+  InvalidPaymentAmountException(this.amount);
+
+  @override
+  String toString() {
+    return 'InvalidPaymentAmountException: Payment amounts cannot be negative (got $amount)';
+  }
+}
+
 class ProcessSaleResult {
   final SaleInvoice invoice;
   final Map<String, Product> updatedProducts;
   final Contact updatedCustomer;
   final StatementEntry? statementEntry;
+  final List<CheckRecord> createdChecks;
 
   const ProcessSaleResult({
     required this.invoice,
     required this.updatedProducts,
     required this.updatedCustomer,
     this.statementEntry,
+    this.createdChecks = const [],
   });
 }
 
@@ -36,11 +50,17 @@ class SalesService {
 
   static double _round2(num val) => (val * 100).roundToDouble() / 100.0;
 
-  /// Validates that split payment amounts equal the total invoice amount.
+  /// Validates that split payment amounts are non-negative and equal the total invoice amount.
   static void validateSplitPayment({
     required num totalAmount,
     required List<PaymentSplit> payments,
   }) {
+    for (final p in payments) {
+      if (p.amount < 0) {
+        throw InvalidPaymentAmountException(p.amount);
+      }
+    }
+
     final expected = _round2(totalAmount);
     final actualSum = _round2(payments.fold(0.0, (sum, p) => sum + p.amount));
 
@@ -49,7 +69,8 @@ class SalesService {
     }
   }
 
-  /// Atomically processes a sale invoice, deducting stock and mutating debtor balances.
+  /// Atomically processes a sale invoice, deducting stock, recording check records,
+  /// and mutating debtor balances without penny discrepancies.
   static ProcessSaleResult processSale({
     required int invoiceSequenceNumber,
     required Contact customer,
@@ -58,6 +79,7 @@ class SalesService {
     required bool isTaxInclusiveInput,
     double vatRate = 0.17,
     required List<PaymentSplit> payments,
+    double? inclusiveTotalOverride,
     String? allocationNumber,
     String? dispatchId,
     String? notes,
@@ -68,9 +90,27 @@ class SalesService {
     final String seqStr = invoiceSequenceNumber.toString().padLeft(5, '0');
     final String invoiceNumber = 'INV-${invoiceDate.year}-$seqStr';
 
-    final double subtotal = _round2(items.fold(0.0, (acc, item) => acc + item.subtotal));
-    final double vatAmount = _round2(subtotal * vatRate);
-    final double totalAmount = _round2(subtotal + vatAmount);
+    double subtotal;
+    double vatAmount;
+    double totalAmount;
+
+    if (isTaxInclusiveInput) {
+      if (inclusiveTotalOverride != null) {
+        totalAmount = _round2(inclusiveTotalOverride);
+      } else {
+        totalAmount = _round2(items.fold(0.0, (acc, item) => acc + item.subtotal));
+      }
+      final vatRes = VatCalculator.calculateFromInclusive(
+        totalInclusive: totalAmount,
+        vatRate: vatRate,
+      );
+      subtotal = vatRes.subtotal;
+      vatAmount = vatRes.vatAmount;
+    } else {
+      subtotal = _round2(items.fold(0.0, (acc, item) => acc + item.subtotal));
+      vatAmount = _round2(subtotal * vatRate);
+      totalAmount = _round2(subtotal + vatAmount);
+    }
 
     // Validate payment split equals invoice total
     validateSplitPayment(totalAmount: totalAmount, payments: payments);
@@ -92,11 +132,33 @@ class SalesService {
       }
     }
 
-    // Evaluate on-account debt payment
+    // Process checks into pending CheckRecord items
+    final List<CheckRecord> createdChecks = [];
     double debtAmount = 0.0;
-    for (final p in payments) {
+
+    for (int i = 0; i < payments.length; i++) {
+      final p = payments[i];
       if (p.method == PaymentMethod.debt) {
         debtAmount += p.amount;
+      } else if (p.method == PaymentMethod.check) {
+        createdChecks.add(
+          CheckRecord(
+            id: 'chk-$invoiceNumber-${i + 1}',
+            checkNumber: p.reference ?? 'CHK-$invoiceNumber-${i + 1}',
+            bankName: 'Bank',
+            branchNumber: '',
+            accountNumber: '',
+            amount: p.amount,
+            dueDate: invoiceDate,
+            type: CheckType.received,
+            partyId: customer.id,
+            partyName: customer.name,
+            relatedTransactionId: invoiceNumber,
+            status: CheckStatus.pending,
+            history: [],
+            createdAt: invoiceDate,
+          ),
+        );
       }
     }
     debtAmount = _round2(debtAmount);
@@ -151,6 +213,7 @@ class SalesService {
       updatedProducts: updatedProducts,
       updatedCustomer: updatedCustomer,
       statementEntry: statementEntry,
+      createdChecks: createdChecks,
     );
   }
 }
