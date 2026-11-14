@@ -6,6 +6,8 @@ import '../utils/currency_formatter.dart';
 
 class CompanyInfo {
   final String name;
+  final String? nameHebrew;
+  final String? nameArabic;
   final String subtitleHebrew;
   final String subtitleArabic;
   final String taxId;
@@ -13,7 +15,9 @@ class CompanyInfo {
   final String address;
 
   const CompanyInfo({
-    required this.name,
+    this.name = '',
+    this.nameHebrew,
+    this.nameArabic,
     required this.subtitleHebrew,
     required this.subtitleArabic,
     required this.taxId,
