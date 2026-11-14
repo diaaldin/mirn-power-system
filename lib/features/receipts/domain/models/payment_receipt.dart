@@ -5,12 +5,32 @@ enum ReceiptType {
   customerReceipt,
   supplierPayment;
 
-  String get displayName {
+  String get displayName => '$arabicTitle / $hebrewTitle';
+
+  String get arabicTitle {
     switch (this) {
       case ReceiptType.customerReceipt:
-        return 'سند قبض / קבלה';
+        return 'سند قبض';
       case ReceiptType.supplierPayment:
-        return 'سند صرف / תשלום ספק';
+        return 'سند صرف';
+    }
+  }
+
+  String get hebrewTitle {
+    switch (this) {
+      case ReceiptType.customerReceipt:
+        return 'קבלה';
+      case ReceiptType.supplierPayment:
+        return 'תשלום ספק';
+    }
+  }
+
+  String get englishTitle {
+    switch (this) {
+      case ReceiptType.customerReceipt:
+        return 'Payment Receipt';
+      case ReceiptType.supplierPayment:
+        return 'Supplier Payment Voucher';
     }
   }
 }
@@ -26,7 +46,7 @@ class ReceiptPaymentItem {
   final DateTime? dueDate;
   final String? drawerName;
 
-  const ReceiptPaymentItem({
+  ReceiptPaymentItem({
     required this.method,
     required this.amount,
     this.reference,
@@ -36,7 +56,15 @@ class ReceiptPaymentItem {
     this.accountNumber,
     this.dueDate,
     this.drawerName,
-  });
+  }) {
+    if (amount <= 0) {
+      throw ArgumentError.value(
+        amount,
+        'amount',
+        'Payment item amount must be greater than zero',
+      );
+    }
+  }
 
   ReceiptPaymentItem copyWith({
     PaymentMethod? method,
@@ -114,11 +142,11 @@ class PaymentReceipt {
     required this.contactId,
     required this.contactName,
     required this.totalAmount,
-    required this.payments,
+    required List<ReceiptPaymentItem> payments,
     this.notes,
     required this.createdBy,
     required this.createdAt,
-  }) {
+  }) : payments = List.unmodifiable(payments) {
     if (totalAmount <= 0) {
       throw ArgumentError.value(
         totalAmount,
@@ -145,9 +173,11 @@ class PaymentReceipt {
     }
   }
 
-  bool get isPaymentBalanced =>
-      (payments.fold(0.0, (sum, p) => sum + p.amount) - totalAmount).abs() <=
-      0.01;
+  bool get isPaymentBalanced {
+    final diff =
+        (payments.fold(0.0, (sum, p) => sum + p.amount) - totalAmount).abs();
+    return ((diff * 100).round() / 100.0) <= 0.01;
+  }
 
   ReceiptType get receiptType => partyType == ContactType.supplier
       ? ReceiptType.supplierPayment
@@ -210,7 +240,8 @@ class PaymentReceipt {
       contactName: json['contactName'] as String,
       totalAmount: (json['totalAmount'] as num).toDouble(),
       payments: (json['payments'] as List)
-          .map((p) => ReceiptPaymentItem.fromJson(p as Map<String, dynamic>))
+          .map((p) => ReceiptPaymentItem.fromJson(
+              Map<String, dynamic>.from(p as Map)))
           .toList(),
       notes: json['notes'] as String?,
       createdBy: json['createdBy'] as String? ?? '',

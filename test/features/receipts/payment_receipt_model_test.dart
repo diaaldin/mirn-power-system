@@ -15,7 +15,7 @@ void main() {
         contactName: 'شركة البراق للمقاولات',
         totalAmount: 15000.0,
         payments: [
-          const ReceiptPaymentItem(
+          ReceiptPaymentItem(
             method: PaymentMethod.cash,
             amount: 5000.0,
           ),
@@ -56,7 +56,7 @@ void main() {
         contactId: 'supp-201',
         contactName: 'مورد مواد البناء العربي',
         totalAmount: 8500.0,
-        payments: const [
+        payments: [
           ReceiptPaymentItem(
             method: PaymentMethod.bankTransfer,
             amount: 8500.0,
@@ -84,7 +84,7 @@ void main() {
           contactId: 'cust-101',
           contactName: 'شركة البراق',
           totalAmount: 10000.0,
-          payments: const [
+          payments: [
             ReceiptPaymentItem(
               method: PaymentMethod.cash,
               amount: 8000.0,
@@ -106,7 +106,7 @@ void main() {
           contactId: 'cust-101',
           contactName: 'شركة البراق',
           totalAmount: 10000.0,
-          payments: const [
+          payments: [
             ReceiptPaymentItem(
               method: PaymentMethod.cash,
               amount: 12000.0,
@@ -130,7 +130,7 @@ void main() {
           contactId: 'cust-101',
           contactName: 'شركة البراق',
           totalAmount: 0.0,
-          payments: const [],
+          payments: [],
           createdBy: 'admin-01',
           createdAt: DateTime(2026, 11, 14),
         ),
@@ -147,12 +147,7 @@ void main() {
           contactId: 'cust-101',
           contactName: 'شركة البراق',
           totalAmount: -500.0,
-          payments: const [
-            ReceiptPaymentItem(
-              method: PaymentMethod.cash,
-              amount: -500.0,
-            ),
-          ],
+          payments: [],
           createdBy: 'admin-01',
           createdAt: DateTime(2026, 11, 14),
         ),
@@ -160,24 +155,131 @@ void main() {
       );
     });
 
-    test('rejects receipt if any payment item amount is non-positive', () {
+    test('rejects ReceiptPaymentItem constructor with non-positive amount directly', () {
+      expect(
+        () => ReceiptPaymentItem(
+          method: PaymentMethod.cash,
+          amount: 0.0,
+        ),
+        throwsArgumentError,
+      );
+
+      expect(
+        () => ReceiptPaymentItem(
+          method: PaymentMethod.cash,
+          amount: -50.0,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('enforces defensive immutability on payments list', () {
+      final receipt = PaymentReceipt(
+        id: 'rec-008',
+        receiptNumber: 'REC-2026-00008',
+        date: DateTime.now(),
+        partyType: ContactType.customer,
+        contactId: 'cust-101',
+        contactName: 'شركة البراق',
+        totalAmount: 100.0,
+        payments: [
+          ReceiptPaymentItem(
+            method: PaymentMethod.cash,
+            amount: 100.0,
+          ),
+        ],
+        createdBy: 'admin-01',
+        createdAt: DateTime.now(),
+      );
+
+      expect(
+        () => receipt.payments.add(
+          ReceiptPaymentItem(
+            method: PaymentMethod.cash,
+            amount: 50.0,
+          ),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('validates exact 0.01 tolerance boundary (100.01 passes, 100.02 rejects)', () {
+      // 100.01 difference is 0.01: PASSES
+      final upperBoundaryReceipt = PaymentReceipt(
+        id: 'rec-bound-1',
+        receiptNumber: 'REC-2026-B001',
+        date: DateTime(2026, 11, 14),
+        partyType: ContactType.customer,
+        contactId: 'cust-101',
+        contactName: 'شركة البراق',
+        totalAmount: 100.00,
+        payments: [
+          ReceiptPaymentItem(
+            method: PaymentMethod.cash,
+            amount: 100.01,
+          ),
+        ],
+        createdBy: 'admin-01',
+        createdAt: DateTime(2026, 11, 14),
+      );
+      expect(upperBoundaryReceipt.isPaymentBalanced, isTrue);
+
+      // 99.99 difference is 0.01: PASSES
+      final lowerBoundaryReceipt = PaymentReceipt(
+        id: 'rec-bound-2',
+        receiptNumber: 'REC-2026-B002',
+        date: DateTime(2026, 11, 14),
+        partyType: ContactType.customer,
+        contactId: 'cust-101',
+        contactName: 'شركة البراق',
+        totalAmount: 100.00,
+        payments: [
+          ReceiptPaymentItem(
+            method: PaymentMethod.cash,
+            amount: 99.99,
+          ),
+        ],
+        createdBy: 'admin-01',
+        createdAt: DateTime(2026, 11, 14),
+      );
+      expect(lowerBoundaryReceipt.isPaymentBalanced, isTrue);
+
+      // 100.02 difference is 0.02: THROWS ArgumentError
       expect(
         () => PaymentReceipt(
-          id: 'rec-005',
-          receiptNumber: 'REC-2026-00005',
+          id: 'rec-bound-3',
+          receiptNumber: 'REC-2026-B003',
           date: DateTime(2026, 11, 14),
           partyType: ContactType.customer,
           contactId: 'cust-101',
           contactName: 'شركة البراق',
-          totalAmount: 100.0,
-          payments: const [
+          totalAmount: 100.00,
+          payments: [
             ReceiptPaymentItem(
               method: PaymentMethod.cash,
-              amount: 100.0,
+              amount: 100.02,
             ),
+          ],
+          createdBy: 'admin-01',
+          createdAt: DateTime(2026, 11, 14),
+        ),
+        throwsArgumentError,
+      );
+
+      // 99.98 difference is 0.02: THROWS ArgumentError
+      expect(
+        () => PaymentReceipt(
+          id: 'rec-bound-4',
+          receiptNumber: 'REC-2026-B004',
+          date: DateTime(2026, 11, 14),
+          partyType: ContactType.customer,
+          contactId: 'cust-101',
+          contactName: 'شركة البراق',
+          totalAmount: 100.00,
+          payments: [
             ReceiptPaymentItem(
               method: PaymentMethod.cash,
-              amount: 0.0,
+              amount: 99.98,
             ),
           ],
           createdBy: 'admin-01',
@@ -187,8 +289,20 @@ void main() {
       );
     });
 
-    test('accepts receipt with slight floating point variance within 0.01 tolerance', () {
-      // 33.333 + 33.333 + 33.334 = 100.00
+    test('verifies ReceiptType trilingual titles and display names', () {
+      expect(ReceiptType.customerReceipt.arabicTitle, equals('سند قبض'));
+      expect(ReceiptType.customerReceipt.hebrewTitle, equals('קבלה'));
+      expect(ReceiptType.customerReceipt.englishTitle, equals('Payment Receipt'));
+      expect(ReceiptType.customerReceipt.displayName, equals('سند قبض / קבלה'));
+
+      expect(ReceiptType.supplierPayment.arabicTitle, equals('سند صرف'));
+      expect(ReceiptType.supplierPayment.hebrewTitle, equals('תשלום ספק'));
+      expect(ReceiptType.supplierPayment.englishTitle, equals('Supplier Payment Voucher'));
+      expect(ReceiptType.supplierPayment.displayName, equals('سند صرف / תשלום ספק'));
+    });
+
+    test('accepts receipt with slight floating point variance across multiple items', () {
+      // 33.33 + 33.33 + 33.34 = 100.00
       final receipt = PaymentReceipt(
         id: 'rec-006',
         receiptNumber: 'REC-2026-00006',
@@ -197,7 +311,7 @@ void main() {
         contactId: 'cust-101',
         contactName: 'شركة البراق',
         totalAmount: 100.0,
-        payments: const [
+        payments: [
           ReceiptPaymentItem(
             method: PaymentMethod.cash,
             amount: 33.33,
@@ -218,7 +332,7 @@ void main() {
       expect(receipt.isPaymentBalanced, isTrue);
     });
 
-    test('JSON serialization roundtrip preserves all fields', () {
+    test('JSON serialization roundtrip preserves all fields with defensive map decoding', () {
       final receipt = PaymentReceipt(
         id: 'rec-007',
         receiptNumber: 'REC-2026-00007',
@@ -228,7 +342,7 @@ void main() {
         contactName: 'خالد مصطفى',
         totalAmount: 7500.50,
         payments: [
-          const ReceiptPaymentItem(
+          ReceiptPaymentItem(
             method: PaymentMethod.cash,
             amount: 2500.50,
             reference: 'REF-CASH-1',
@@ -250,7 +364,9 @@ void main() {
       );
 
       final json = receipt.toJson();
-      final roundtripped = PaymentReceipt.fromJson(json);
+      // Test defensive deserialization with Map<dynamic, dynamic>
+      final dynamicJson = Map<dynamic, dynamic>.from(json);
+      final roundtripped = PaymentReceipt.fromJson(Map<String, dynamic>.from(dynamicJson));
 
       expect(roundtripped.id, equals(receipt.id));
       expect(roundtripped.receiptNumber, equals(receipt.receiptNumber));
@@ -283,7 +399,7 @@ void main() {
     });
 
     test('ReceiptPaymentItem JSON serialization roundtrip with null optional fields', () {
-      const item = ReceiptPaymentItem(
+      final item = ReceiptPaymentItem(
         method: PaymentMethod.bankTransfer,
         amount: 3200.0,
       );
