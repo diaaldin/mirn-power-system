@@ -48,4 +48,32 @@ class UnitConverter {
     // Piece-based or other units default to 1:1 deduction
     return qty;
   }
+
+  /// Calculates the amount to add to `product.currentStock` (which is stored
+  /// in `product.unitType`) when `quantity` is purchased in `purchasedUnit`.
+  static double calculateStockAddition({
+    required Product product,
+    required num quantity,
+    required UnitType purchasedUnit,
+  }) {
+    final double qty = quantity.toDouble();
+    if (product.unitType == purchasedUnit) {
+      return qty;
+    }
+
+    final double factor = product.meterPerBox ?? 1.0;
+
+    // Product is stored in meters, purchased in boxes:
+    if (product.unitType == UnitType.meter && purchasedUnit == UnitType.box) {
+      return boxesToMeters(boxes: qty, meterPerBox: factor);
+    }
+
+    // Product is stored in boxes, purchased in meters:
+    if (product.unitType == UnitType.box && purchasedUnit == UnitType.meter) {
+      return metersToBoxes(meters: qty, meterPerBox: factor);
+    }
+
+    // Piece-based or other units default to 1:1 addition
+    return qty;
+  }
 }
