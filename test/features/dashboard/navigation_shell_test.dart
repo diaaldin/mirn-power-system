@@ -41,5 +41,10 @@ void main() {
       expect(AppColorValues.deepBlack, equals(0xFF121214));
       expect(AppColorValues.charcoalBlack, equals(0xFF1E1E24));
     });
+
+    test('verifies inventory destination route and attributes', () {
+      expect(AppNavDestination.inventory.route, equals('/inventory'));
+      expect(AppNavDestination.inventory.englishTitle, equals('Inventory'));
+    });
   });
 }

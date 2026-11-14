@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/app_locale.dart';
+import 'core/pdf/invoice_pdf_generator.dart';
+import 'core/pdf/purchase_pdf_generator.dart';
 import 'core/theme/mirn_theme.dart';
 import 'core/utils/currency_formatter.dart';
 import 'features/accounts/domain/models/contact.dart';
@@ -10,6 +12,10 @@ import 'features/checks/domain/models/check_record.dart';
 import 'features/checks/presentation/screens/checks_screen.dart';
 import 'features/dashboard/presentation/widgets/navigation_shell.dart';
 import 'features/inventory/domain/models/product.dart';
+import 'features/inventory/domain/services/unit_converter.dart';
+import 'features/purchases/domain/models/purchase_invoice.dart';
+import 'features/purchases/domain/services/purchase_service.dart';
+import 'features/purchases/presentation/controllers/purchases_controller.dart';
 import 'features/receipts/domain/models/payment_receipt.dart';
 import 'features/receipts/domain/services/receipt_service.dart';
 import 'features/sales/domain/models/payment_split.dart';
@@ -97,6 +103,86 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       type: ContactType.customer,
       currentBalance: 12500.0,
       debtWarningLimit: 25000.0,
+    ),
+    const Contact(
+      id: 'supp-201',
+      name: 'محاجر القدس وشركة الرخام / מחצבות ירושלים בע"מ',
+      phone: '02-5819000',
+      address: 'القدس - المنطقة الصناعية عطروت / אזור תעשייה עטרות',
+      taxId: '512938475',
+      type: ContactType.supplier,
+      currentBalance: 45000.0,
+      debtWarningLimit: 100000.0,
+    ),
+    const Contact(
+      id: 'supp-202',
+      name: 'سيراميك ومستوردات المتوسط ش.م.م / קרמיקה הים התיכון בע"מ',
+      phone: '03-6821234',
+      address: 'تل أبيب - شارع هرצל / תל אביב',
+      taxId: '513847291',
+      type: ContactType.supplier,
+      currentBalance: 28500.0,
+      debtWarningLimit: 75000.0,
+    ),
+  ];
+
+  // Mock Purchase Invoices
+  final List<PurchaseInvoice> _purchaseInvoices = [
+    PurchaseInvoice(
+      id: 'PUR-2026-00098',
+      invoiceNumber: 'PUR-2026-00098',
+      supplierInvoiceNumber: 'INV-SUP-8821',
+      date: DateTime(2026, 11, 8),
+      supplierId: 'supp-201',
+      supplierName: 'محاجر القدس وشركة الرخام / מחצבות ירושלים בע"מ',
+      supplierTaxId: '512938475',
+      items: [
+        PurchaseLineItem(
+          productId: 'prod-001',
+          productName: 'رخام كلكتا جولد إيطالي / שיش קלקטה גולד',
+          unitType: UnitType.meter,
+          quantity: 150.0,
+          unitCost: 195.0,
+          subtotal: 29250.0,
+          convertedStockQuantity: 150.0,
+        ),
+      ],
+      subtotal: 29250.0,
+      vatRate: 0.17,
+      vatAmount: 4972.50,
+      totalAmount: 34222.50,
+      paidAmount: 0.0,
+      onAccountAmount: 34222.50,
+      createdBy: 'diaaldin',
+      createdAt: DateTime(2026, 11, 8),
+    ),
+    PurchaseInvoice(
+      id: 'PUR-2026-00099',
+      invoiceNumber: 'PUR-2026-00099',
+      supplierInvoiceNumber: 'TX-2026-4401',
+      date: DateTime(2026, 11, 12),
+      supplierId: 'supp-202',
+      supplierName: 'سيراميك ومستوردات المتوسط ش.م.م / קרמיקה הים התיכון בע"מ',
+      supplierTaxId: '513847291',
+      items: [
+        PurchaseLineItem(
+          productId: 'prod-003',
+          productName: 'كرسي حمام معلق سمارت أسود مطفي / אסלה תלויה שחורה',
+          unitType: UnitType.piece,
+          quantity: 20.0,
+          unitCost: 1150.0,
+          subtotal: 23000.0,
+          convertedStockQuantity: 20.0,
+        ),
+      ],
+      subtotal: 23000.0,
+      vatRate: 0.17,
+      vatAmount: 3910.0,
+      totalAmount: 26910.0,
+      paidAmount: 26910.0,
+      onAccountAmount: 0.0,
+      createdBy: 'diaaldin',
+      createdAt: DateTime(2026, 11, 12),
     ),
   ];
 
@@ -318,6 +404,11 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                 label: _getNavLabel(AppNavDestination.sales),
               ),
               NavigationDestination(
+                icon: const Icon(Icons.inventory_2_outlined),
+                selectedIcon: const Icon(Icons.inventory_2, color: goldColor),
+                label: _getNavLabel(AppNavDestination.inventory),
+              ),
+              NavigationDestination(
                 icon: const Icon(Icons.account_balance_wallet_outlined),
                 selectedIcon: const Icon(Icons.account_balance_wallet, color: goldColor),
                 label: _getNavLabel(AppNavDestination.accounts),
@@ -357,10 +448,12 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       case 1:
         return _buildSalesPosScreen();
       case 2:
-        return _buildStatementScreen();
+        return _buildInventoryScreen();
       case 3:
-        return _buildChecksScreen();
+        return _buildStatementScreen();
       case 4:
+        return _buildChecksScreen();
+      case 5:
         return _buildFleetScreen();
       default:
         return _buildDashboardScreen();
@@ -495,13 +588,13 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Contact>(
-                  initialValue: state.selectedCustomer ?? _contacts.first,
+                  initialValue: state.selectedCustomer ?? _contacts.firstWhere((c) => c.type != ContactType.supplier),
                   decoration: const InputDecoration(
                     labelText: 'الزبون / לקוח',
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
-                  items: _contacts.map((c) {
+                  items: _contacts.where((c) => c.type != ContactType.supplier).map((c) {
                     return DropdownMenuItem(
                       value: c,
                       child: Text('${c.name} (حساب: ${formatCurrency(c.currentBalance)})'),
@@ -582,6 +675,414 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     Text(formatCurrency(state.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(AppColorValues.primaryGold))),
                   ],
                 ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInventoryScreen() {
+    final double totalStockValuation = _products.fold<double>(
+      0.0,
+      (acc, p) => acc + (p.currentStock * p.purchaseCost),
+    );
+
+    final int lowStockCount = _products.where((p) {
+      if (p.unitType == UnitType.meter) return p.currentStock <= 500.0;
+      return p.currentStock <= 40.0;
+    }).length;
+
+    final double totalMarbleMeters = _products
+        .where((p) => p.unitType == UnitType.meter)
+        .fold<double>(0.0, (acc, p) => acc + p.currentStock);
+
+    final int activeProductsCount = _products.length;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header with action button
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentLanguage == AppLanguage.arabic
+                            ? 'إدارة المستودع والمشتريات'
+                            : _currentLanguage == AppLanguage.hebrew
+                                ? 'ניהול מלאי ורכש'
+                                : 'Inventory & Purchase Intake',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentLanguage == AppLanguage.arabic
+                            ? 'متابعة حركات التوريد، الأرصدة، تكلفة الشراء، والوحدات المزدوجة'
+                            : 'מעקב קליטת מלאי, יתרות, עלויות ממוצעות והמרת יחידות',
+                        style: const TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart, size: 18),
+                  label: Text(
+                    _currentLanguage == AppLanguage.arabic
+                        ? 'توريد بضاعة وفاتورة مشتريات جديدة'
+                        : _currentLanguage == AppLanguage.hebrew
+                            ? 'קליטת רכש ומלאי חדש'
+                            : 'New Purchase Intake',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _showNewPurchaseDialog,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Live KPI cards
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic
+                  ? 'إجمالي تقييم المخزون'
+                  : 'שווי מלאי כולל',
+              value: formatCurrency(totalStockValuation),
+              icon: Icons.account_balance,
+              color: const Color(AppColorValues.primaryGold),
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic
+                  ? 'تنبيهات نقص المخزون'
+                  : 'התראות מלאי נמוך',
+              value: '$lowStockCount أصناف',
+              icon: Icons.warning_amber_rounded,
+              color: lowStockCount > 0 ? Colors.redAccent : const Color(AppColorValues.successGreen),
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic
+                  ? 'إجمالي مساحات الرخام'
+                  : 'סה"כ שיש/גרניט (מ"ר)',
+              value: '${totalMarbleMeters.toStringAsFixed(1)} م²',
+              icon: Icons.grid_view,
+              color: Colors.cyanAccent,
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic
+                  ? 'الأصناف النشطة'
+                  : 'מוצרים פעילים',
+              value: '$activeProductsCount صنف',
+              icon: Icons.inventory_2,
+              color: const Color(AppColorValues.infoBlue),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // Product Inventory Table
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'جدول أرصدة المخزون والتكلفة الحالية'
+                          : 'טבלת מלאי ועלויות רכש',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_products.length} أصناف مسجلة',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columnSpacing: 16,
+                    columns: [
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'المنتج / الصنف' : 'מוצר')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'التصنيف' : 'קטגוריה')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'المخزون الحالي' : 'מלאי')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'التعبئة والتحويل' : 'אריזה/המרה')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'سعر التكلفة' : 'עלות רכש')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'سعر البيع' : 'מחיר מכירה')),
+                      DataColumn(label: Text(_currentLanguage == AppLanguage.arabic ? 'الحالة' : 'סטטוס')),
+                    ],
+                    rows: _products.map((p) {
+                      final isLow = p.unitType == UnitType.meter
+                          ? p.currentStock <= 500.0
+                          : p.currentStock <= 40.0;
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text(p.sku, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (p.category == ProductCategory.marble
+                                        ? const Color(AppColorValues.primaryGold)
+                                        : Colors.blueAccent)
+                                    .withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                p.category.name,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: p.category == ProductCategory.marble
+                                      ? const Color(AppColorValues.primaryGold)
+                                      : Colors.blueAccent,
+                                ),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '${p.currentStock.toStringAsFixed(1)} ${p.unitType == UnitType.meter ? "م²" : "حبة"}',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataCell(
+                            p.meterPerBox != null
+                                ? Text(
+                                    '${(p.currentStock / p.meterPerBox!).toStringAsFixed(1)} كرتونة (${p.meterPerBox} م²/كرتونة)',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  )
+                                : const Text('-', style: TextStyle(color: Colors.grey)),
+                          ),
+                          DataCell(
+                            Text(formatCurrency(p.purchaseCost), style: const TextStyle(color: Colors.orangeAccent)),
+                          ),
+                          DataCell(
+                            Text(formatCurrency(p.sellingPrice), style: const TextStyle(color: Colors.greenAccent)),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (isLow ? Colors.redAccent : Colors.green).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: (isLow ? Colors.redAccent : Colors.green).withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isLow ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                                    size: 13,
+                                    color: isLow ? Colors.redAccent : Colors.green,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isLow ? 'نقص بالمخزون' : 'وافر',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: isLow ? Colors.redAccent : Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Recent Purchases History Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'سجل فواتير المشتريات والتوريد الأخيرة'
+                          : 'היסטוריית חשבוניות רכש אחרונות',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${_purchaseInvoices.length} فواتير توريد',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_purchaseInvoices.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: Text('لا توجد فواتير مشتريات مسجلة بعد', style: TextStyle(color: Colors.grey)),
+                    ),
+                  )
+                else
+                  ..._purchaseInvoices.map((inv) {
+                    final dateStr =
+                        '${inv.date.year}-${inv.date.month.toString().padLeft(2, '0')}-${inv.date.day.toString().padLeft(2, '0')}';
+                    final isFullyPaid = inv.onAccountAmount <= 0.01;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: const Color(AppColorValues.primaryGold).withValues(alpha: 0.2),
+                            child: const Icon(Icons.receipt, color: Color(AppColorValues.primaryGold), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      inv.invoiceNumber,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    if (inv.supplierInvoiceNumber != null && inv.supplierInvoiceNumber!.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '(فاتورة المورد: ${inv.supplierInvoiceNumber})',
+                                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'المورد: ${inv.supplierName} • $dateStr',
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 6,
+                                  children: inv.items.map((it) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white10,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${it.productName}: ${it.quantity} ${it.unitType.name} (+${it.convertedStockQuantity.toStringAsFixed(1)} للمخزون)',
+                                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                formatCurrency(inv.totalAmount),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: Color(AppColorValues.primaryGold),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (isFullyPaid ? Colors.green : Colors.orangeAccent).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  isFullyPaid ? 'مسددة بالكامل' : 'ذمة على الحساب',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isFullyPaid ? Colors.greenAccent : Colors.orangeAccent,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.picture_as_pdf, size: 14),
+                                label: const Text('طباعة PDF', style: TextStyle(fontSize: 11)),
+                                onPressed: () {
+                                  final supp = _contacts.cast<Contact?>().firstWhere(
+                                    (c) => c?.id == inv.supplierId,
+                                    orElse: () => null,
+                                  );
+                                  _showPurchasePdfPreview(inv, supp);
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
               ],
             ),
           ),
@@ -1263,5 +1764,706 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       checkNumberCtrl.dispose();
       bankNameCtrl.dispose();
     });
+  }
+
+  void _showNewPurchaseDialog() {
+    final availableSuppliers = _contacts
+        .where((c) => c.type == ContactType.supplier || c.type == ContactType.both)
+        .toList();
+
+    if (availableSuppliers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد موردين مسجلين في النظام')),
+      );
+      return;
+    }
+
+    final nextNumber = 'PUR-2026-${(_purchaseInvoices.length + 101).toString().padLeft(5, '0')}';
+
+    final invoiceNumberCtrl = TextEditingController(text: nextNumber);
+    final supplierInvoiceCtrl = TextEditingController();
+    final quantityCtrl = TextEditingController(text: '100');
+    final unitCostCtrl = TextEditingController();
+    final paidAmountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+
+    Contact selectedSupplier = availableSuppliers.first;
+    Product selectedProduct = _products.first;
+    UnitType selectedUnit = selectedProduct.unitType;
+    unitCostCtrl.text = selectedProduct.purchaseCost.toStringAsFixed(2);
+
+    final List<PurchaseItemDraft> draftItems = [];
+    bool isPaidImmediately = false;
+    String? validationError;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final double currentQty = double.tryParse(quantityCtrl.text.trim()) ?? 0.0;
+            final double currentUnitCost = double.tryParse(unitCostCtrl.text.trim()) ?? 0.0;
+
+            final double previewConvertedStock = UnitConverter.calculateStockAddition(
+              product: selectedProduct,
+              quantity: currentQty > 0 ? currentQty : 1.0,
+              purchasedUnit: selectedUnit,
+            );
+
+            // Compute effective items: if draftItems is not empty, use draftItems.
+            // If empty and currentQty > 0, include single item preview.
+            final List<PurchaseItemDraft> effectiveItems = List.from(draftItems);
+            if (effectiveItems.isEmpty && currentQty > 0 && currentUnitCost >= 0) {
+              effectiveItems.add(
+                PurchaseItemDraft(
+                  product: selectedProduct,
+                  unitType: selectedUnit,
+                  quantity: currentQty,
+                  unitCost: currentUnitCost,
+                ),
+              );
+            }
+
+            final double subtotal = ((effectiveItems.fold<double>(0.0, (acc, item) => acc + item.subtotal)) * 100).roundToDouble() / 100.0;
+            final double vatAmount = ((subtotal * 0.17) * 100).roundToDouble() / 100.0;
+            final double totalAmount = ((subtotal + vatAmount) * 100).roundToDouble() / 100.0;
+
+            final double enteredPaid = double.tryParse(paidAmountCtrl.text.trim()) ?? 0.0;
+            final double effectivePaid = isPaidImmediately ? totalAmount : enteredPaid;
+            final double onAccount = ((totalAmount - effectivePaid) * 100).roundToDouble() / 100.0;
+            final double projectedBalance = ((selectedSupplier.currentBalance + onAccount) * 100).roundToDouble() / 100.0;
+
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.inventory_2, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'توريد بضاعة وفاتورة مشتريات جديدة / קליטת רכש ומלאי',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Supplier selection
+                      DropdownButtonFormField<Contact>(
+                        initialValue: selectedSupplier,
+                        decoration: const InputDecoration(
+                          labelText: 'المورد المسجل / ספק רשום',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: availableSuppliers.map((s) {
+                          return DropdownMenuItem(
+                            value: s,
+                            child: Text('${s.name} (رصيد: ${formatCurrency(s.currentBalance)})'),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedSupplier = val;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Invoice numbers
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: invoiceNumberCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم الفاتورة الداخلي / מס\' חשבונית',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: supplierInvoiceCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم فاتورة المورد / חשבונית ספק',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text(
+                        'إضافة صنف للتوريد / הוספת פריט:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Product selection
+                      DropdownButtonFormField<Product>(
+                        initialValue: selectedProduct,
+                        decoration: const InputDecoration(
+                          labelText: 'المنتج / الصنف',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _products.map((p) {
+                          return DropdownMenuItem(
+                            value: p,
+                            child: Text('${p.name} (المخزون الحالي: ${p.currentStock.toStringAsFixed(1)})'),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedProduct = val;
+                              selectedUnit = val.unitType;
+                              unitCostCtrl.text = val.purchaseCost.toStringAsFixed(2);
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Unit & Quantity & Unit Cost
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<UnitType>(
+                              initialValue: selectedUnit,
+                              decoration: const InputDecoration(
+                                labelText: 'وحدة التوريد / יחידה',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: (selectedProduct.unitType == UnitType.piece
+                                      ? [UnitType.piece]
+                                      : [UnitType.meter, UnitType.box])
+                                  .map((u) {
+                                return DropdownMenuItem(
+                                  value: u,
+                                  child: Text(u == UnitType.meter
+                                      ? 'متر مربع (م²)'
+                                      : u == UnitType.box
+                                          ? 'كرتونة (Box)'
+                                          : 'حبة (Piece)'),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() {
+                                    selectedUnit = val;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: quantityCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'الكمية / כמות',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: unitCostCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'التكلفة (₪)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Dual-unit conversion preview banner
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.sync_alt, size: 16, color: Color(AppColorValues.primaryGold)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedProduct.meterPerBox != null
+                                    ? (selectedUnit == UnitType.box
+                                        ? 'التحويل: $currentQty كرتونة = ${previewConvertedStock.toStringAsFixed(2)} م² ستضاف للمخزون (معدل ${selectedProduct.meterPerBox} م²/كرتونة)'
+                                        : 'التحويل: $currentQty م² = ${(currentQty / (selectedProduct.meterPerBox ?? 1.0)).toStringAsFixed(2)} كرتونة')
+                                    : 'الكمية المضافة للمخزون: $currentQty ${selectedProduct.unitType == UnitType.meter ? "م²" : "حبة"}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(AppColorValues.primaryGold),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Add Item to Draft Button
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(AppColorValues.primaryGold),
+                            side: const BorderSide(color: Color(AppColorValues.primaryGold)),
+                          ),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('إضافة الصنف إلى المسودة'),
+                          onPressed: () {
+                            if (currentQty <= 0) {
+                              setDialogState(() {
+                                validationError = 'يرجى إدخال كمية توريد أكبر من الصفر';
+                              });
+                              return;
+                            }
+                            if (currentUnitCost < 0) {
+                              setDialogState(() {
+                                validationError = 'سعر التكلفة لا يمكن أن يكون سالباً';
+                              });
+                              return;
+                            }
+                            setDialogState(() {
+                              draftItems.add(
+                                PurchaseItemDraft(
+                                  product: selectedProduct,
+                                  unitType: selectedUnit,
+                                  quantity: currentQty,
+                                  unitCost: currentUnitCost,
+                                ),
+                              );
+                              validationError = null;
+                            });
+                          },
+                        ),
+                      ),
+
+                      // Show Draft Items List
+                      if (draftItems.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        const Text('الأصناف في المسودة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 4),
+                        ...draftItems.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final item = entry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item.product.name} - ${item.quantity} ${item.unitType.name} × ${formatCurrency(item.unitCost)} (+${item.convertedStock.toStringAsFixed(1)} للمخزون)',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                                Text(
+                                  formatCurrency(item.subtotal),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      draftItems.removeAt(idx);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                      const SizedBox(height: 12),
+
+                      // Financial Summary Box
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('المجموع الفرعي (قبل الضريبة):', style: TextStyle(fontSize: 12)),
+                                Text(formatCurrency(subtotal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('ضريبة القيمة المضافة (17% מע"מ):', style: TextStyle(fontSize: 12)),
+                                Text(formatCurrency(vatAmount), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('الإجمالي شامل الضريبة:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                Text(
+                                  formatCurrency(totalAmount),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(AppColorValues.primaryGold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Payment Mode switch
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Switch(
+                                value: isPaidImmediately,
+                                activeThumbColor: const Color(AppColorValues.primaryGold),
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    isPaidImmediately = val;
+                                    if (val) {
+                                      paidAmountCtrl.text = totalAmount.toStringAsFixed(2);
+                                    } else {
+                                      paidAmountCtrl.text = '0.00';
+                                    }
+                                  });
+                                },
+                              ),
+                              Text(
+                                isPaidImmediately ? 'مسددة فورياً بالكامل' : 'قيد على الحساب (آجل للمورد)',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      if (!isPaidImmediately) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: Text(
+                            'الرصيد المستحق للمورد بعد القيد: ${formatCurrency(projectedBalance)} (+${formatCurrency(onAccount)})',
+                            style: const TextStyle(fontSize: 12, color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+
+                      // Notes input
+                      TextField(
+                        controller: notesCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'ملاحظات وتفاصيل التوريد / הערות',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+
+                      if (validationError != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          validationError!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('تأكيد التوريد وتحديث الأرصدة'),
+                  onPressed: () {
+                    final invNumber = invoiceNumberCtrl.text.trim();
+                    if (invNumber.isEmpty) {
+                      setDialogState(() {
+                        validationError = 'يرجى إدخال رقم الفاتورة الداخلي';
+                      });
+                      return;
+                    }
+
+                    if (effectiveItems.isEmpty) {
+                      setDialogState(() {
+                        validationError = 'يرجى إدخال صنف واحد على الأقل مع كمية صحيحة';
+                      });
+                      return;
+                    }
+
+                    try {
+                      final input = CreatePurchaseInput(
+                        invoiceNumber: invNumber,
+                        supplierInvoiceNumber: supplierInvoiceCtrl.text.trim().isNotEmpty
+                            ? supplierInvoiceCtrl.text.trim()
+                            : null,
+                        date: DateTime.now(),
+                        supplier: selectedSupplier,
+                        items: effectiveItems.map((i) {
+                          return PurchaseLineItemInput(
+                            product: i.product,
+                            unitType: i.unitType,
+                            quantity: i.quantity,
+                            unitCost: i.unitCost,
+                          );
+                        }).toList(),
+                        vatRate: 0.17,
+                        paidAmount: effectivePaid,
+                        notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                        createdBy: 'diaaldin',
+                      );
+
+                      final result = PurchaseService.processPurchase(input);
+
+                      setState(() {
+                        for (final updated in result.updatedProducts) {
+                          final pIdx = _products.indexWhere((p) => p.id == updated.id);
+                          if (pIdx != -1) {
+                            _products[pIdx] = updated;
+                          }
+                        }
+                        final sIdx = _contacts.indexWhere((c) => c.id == result.updatedSupplier.id);
+                        if (sIdx != -1) {
+                          _contacts[sIdx] = result.updatedSupplier;
+                        }
+                        if (result.statementEntry != null) {
+                          _statementController.addEntry(result.statementEntry!);
+                        }
+                        _purchaseInvoices.insert(0, result.purchase);
+                      });
+
+                      Navigator.of(dialogCtx).pop();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'تم تسجيل فاتورة التوريد رقم ${result.purchase.invoiceNumber} وتحديث أرصدة المخزون والمورد بنجاح',
+                          ),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                          action: SnackBarAction(
+                            label: 'معاينة PDF',
+                            textColor: Colors.black,
+                            onPressed: () {
+                              _showPurchasePdfPreview(result.purchase, result.updatedSupplier);
+                            },
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() {
+                        validationError = 'خطأ في معالجة فاتورة الشراء: $e';
+                      });
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      invoiceNumberCtrl.dispose();
+      supplierInvoiceCtrl.dispose();
+      quantityCtrl.dispose();
+      unitCostCtrl.dispose();
+      paidAmountCtrl.dispose();
+      notesCtrl.dispose();
+    });
+  }
+
+  void _showPurchasePdfPreview(PurchaseInvoice invoice, [Contact? supplier]) async {
+    const company = CompanyInfo(
+      name: 'M.I.R.N POWER Ltd.',
+      nameArabic: 'شركة م.ي.ר.ن باور م.ض',
+      nameHebrew: 'מ.י.ר.ן פאוור בע"מ',
+      subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
+      subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
+      taxId: '515892104',
+      phone: '02-1234567',
+      address: 'אזור התעשייה עטרות / عطروت, ירושלים',
+    );
+
+    try {
+      final bytes = await PurchasePdfGenerator.generate(
+        invoice: invoice,
+        company: company,
+        supplier: supplier,
+      );
+
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Color(AppColorValues.primaryGold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'معاينة فاتورة توريد: ${invoice.invoiceNumber}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.greenAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'تم توليد مستند A4 PDF بنجاح (${(bytes.length / 1024).toStringAsFixed(1)} KB) وفق المعايير الرسمية المعتمدة.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('المورد / ספק'),
+                    subtitle: Text(invoice.supplierName),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('رقم الفاتورة الخارجية'),
+                    subtitle: Text(invoice.supplierInvoiceNumber ?? 'N/A'),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الإجمالي شامل الضريبة (17%)'),
+                    subtitle: Text(
+                      formatCurrency(invoice.totalAmount),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(AppColorValues.primaryGold),
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الأصناف الموردة'),
+                    subtitle: Text('${invoice.items.length} أصناف مسجلة'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('إغلاق / סגור'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(AppColorValues.primaryGold),
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.print, size: 18),
+                label: const Text('طباعة / הדפסה'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرسال مستند التوريد إلى طابعة الفواتير')),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في توليد PDF: $e')),
+      );
+    }
   }
 }
