@@ -19,7 +19,7 @@ class StatementTotals {
 }
 
 class StatementScreenController {
-  final Contact contact;
+  Contact contact;
   final List<StatementEntry> _allEntries;
   DateTime? _fromDate;
   DateTime? _toDate;
@@ -28,6 +28,14 @@ class StatementScreenController {
     required this.contact,
     required List<StatementEntry> allEntries,
   }) : _allEntries = List.of(allEntries);
+
+  void addEntry(StatementEntry entry) {
+    _allEntries.add(entry);
+  }
+
+  void updateContact(Contact updatedContact) {
+    contact = updatedContact;
+  }
 
   void setDateFilter({DateTime? fromDate, DateTime? toDate}) {
     _fromDate = fromDate;

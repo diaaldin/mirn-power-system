@@ -169,10 +169,13 @@ class ReceiptsController {
       createdBy: createdBy,
     );
 
-    return ReceiptService.processCustomerReceipt(
+    final result = ReceiptService.processCustomerReceipt(
       contact: currentState.contact!,
       input: input,
     );
+    _contact = result.updatedContact;
+    _payments.clear();
+    return result;
   }
 
   /// Submits the supplier payment voucher, settling supplier payable, generating a statement entry,
@@ -201,10 +204,13 @@ class ReceiptsController {
       createdBy: createdBy,
     );
 
-    return ReceiptService.processSupplierPayment(
+    final result = ReceiptService.processSupplierPayment(
       contact: currentState.contact!,
       input: input,
     );
+    _contact = result.updatedSupplier;
+    _payments.clear();
+    return result;
   }
 
   ReceiptFormState _computeState() {
@@ -212,7 +218,10 @@ class ReceiptsController {
       _payments.fold<double>(0.0, (sum, p) => sum + p.amount),
     );
     final remainingToAllocate = _round2(_totalAmount - allocatedAmount);
-    final isComplete = _totalAmount > 0 && remainingToAllocate.abs() <= 0.01;
+    final isComplete =
+        _payments.isNotEmpty &&
+        _totalAmount > 0 &&
+        remainingToAllocate.abs() <= 0.01;
 
     final double? projectedBalance = _contact != null
         ? _round2(_contact!.currentBalance - allocatedAmount)

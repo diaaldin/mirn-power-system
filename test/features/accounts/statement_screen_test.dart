@@ -200,5 +200,64 @@ void main() {
       expect(totals.openingBalance, equals(1000.0));
       expect(totals.totalCredits, equals(500.0));
     });
+
+    test('StatementScreenController addEntry and updateContact dynamically update statement', () {
+      final controller = StatementScreenController(
+        contact: customer,
+        allEntries: entries,
+      );
+
+      final newEntry = StatementEntry(
+        id: 'st-04-new',
+        contactId: customer.id,
+        contactType: ContactType.customer,
+        date: DateTime(2026, 11, 16),
+        type: StatementEntryType.paymentReceipt,
+        referenceNumber: 'REC-2026-999',
+        debit: 0.0,
+        credit: 2500.0,
+        runningBalance: 5000.0,
+        description: 'New payment entry',
+      );
+
+      controller.addEntry(newEntry);
+      controller.updateContact(customer.copyWith(currentBalance: 5000.0));
+
+      final updatedEntries = controller.getFilteredEntries();
+      expect(updatedEntries.length, equals(4));
+      expect(updatedEntries.last.referenceNumber, equals('REC-2026-999'));
+
+      final totals = controller.getTotals();
+      expect(totals.totalCredits, equals(4500.0));
+      expect(totals.closingBalance, equals(5000.0));
+      expect(controller.contact.currentBalance, equals(5000.0));
+    });
+
+    test('ChecksScreenController addCheck registers newly ingested check', () {
+      final controller = ChecksScreenController(initialChecks: []);
+      expect(controller.filteredChecks, isEmpty);
+
+      final newCheck = CheckRecord(
+        id: 'chk-dyn-1',
+        checkNumber: '887766',
+        bankName: 'Arab Bank',
+        branchNumber: '100',
+        accountNumber: '554433',
+        amount: 7500.0,
+        dueDate: DateTime(2026, 12, 20),
+        type: CheckType.received,
+        partyId: customer.id,
+        partyName: customer.name,
+        relatedTransactionId: 'REC-2026-999',
+        status: CheckStatus.pending,
+        history: [],
+        createdAt: DateTime(2026, 11, 16),
+      );
+
+      controller.addCheck(newCheck);
+      expect(controller.filteredChecks.length, equals(1));
+      expect(controller.totalPendingAmount, equals(7500.0));
+      expect(controller.getCheckById('chk-dyn-1')?.checkNumber, equals('887766'));
+    });
   });
 }

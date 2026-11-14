@@ -304,6 +304,10 @@ void main() {
         expect(chk.amount, equals(10000.0));
         expect(chk.type, equals(CheckType.received));
         expect(chk.status, equals(CheckStatus.pending));
+
+        // Verify controller internal state was updated and payments cleared
+        expect(controller.state.contact?.currentBalance, equals(10000.0));
+        expect(controller.state.payments, isEmpty);
       });
     });
 
@@ -358,6 +362,10 @@ void main() {
         expect(chk.amount, equals(20000.0));
         expect(chk.type, equals(CheckType.issued));
         expect(chk.status, equals(CheckStatus.pending));
+
+        // Verify controller internal state was updated and payments cleared
+        expect(controller.state.contact?.currentBalance, equals(10000.0));
+        expect(controller.state.payments, isEmpty);
       });
     });
 

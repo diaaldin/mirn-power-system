@@ -12,6 +12,10 @@ class ChecksScreenController {
     }
   }
 
+  void addCheck(CheckRecord check) {
+    _checksMap[check.id] = check;
+  }
+
   void setStatusFilter(CheckStatus? status) {
     _statusFilter = status;
   }

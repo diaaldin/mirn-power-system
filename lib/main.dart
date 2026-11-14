@@ -10,6 +10,9 @@ import 'features/checks/domain/models/check_record.dart';
 import 'features/checks/presentation/screens/checks_screen.dart';
 import 'features/dashboard/presentation/widgets/navigation_shell.dart';
 import 'features/inventory/domain/models/product.dart';
+import 'features/receipts/domain/models/payment_receipt.dart';
+import 'features/receipts/domain/services/receipt_service.dart';
+import 'features/sales/domain/models/payment_split.dart';
 import 'features/sales/presentation/screens/sales_screen.dart';
 
 void main() {
@@ -609,18 +612,33 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(AppColorValues.primaryGold),
-                        foregroundColor: Colors.black,
-                      ),
-                      icon: const Icon(Icons.picture_as_pdf, size: 18),
-                      label: const Text('تصدير PDF'),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم توليد كشف الحساب A4 PDF بنجاح وفق المعايير الرسمية')),
-                        );
-                      },
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(AppColorValues.primaryGold),
+                            foregroundColor: Colors.black,
+                          ),
+                          icon: const Icon(Icons.add_circle_outline, size: 18),
+                          label: const Text('سند قبض جديد / קבלה חדשה'),
+                          onPressed: _showNewReceiptDialog,
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(AppColorValues.primaryGold),
+                            foregroundColor: Colors.black,
+                          ),
+                          icon: const Icon(Icons.picture_as_pdf, size: 18),
+                          label: const Text('تصدير PDF'),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تم توليد كشف الحساب A4 PDF بنجاح وفق المعايير الرسمية')),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -886,6 +904,357 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showNewReceiptDialog() {
+    final customer = _contacts.first;
+    final currentEntriesCount = _statementController.getFilteredEntries().length;
+    final nextNumber = 'RCP-2026-${(currentEntriesCount + 109).toString().padLeft(5, '0')}';
+
+    final receiptNumberCtrl = TextEditingController(text: nextNumber);
+    final totalAmountCtrl = TextEditingController();
+    final cashAmountCtrl = TextEditingController();
+    final checkAmountCtrl = TextEditingController();
+    final checkNumberCtrl = TextEditingController();
+    final bankNameCtrl = TextEditingController();
+    DateTime dueDate = DateTime.now().add(const Duration(days: 30));
+    String? validationError;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final double rawTotal = double.tryParse(totalAmountCtrl.text.trim()) ?? 0.0;
+            final double rawCash = double.tryParse(cashAmountCtrl.text.trim()) ?? 0.0;
+            final double rawCheck = double.tryParse(checkAmountCtrl.text.trim()) ?? 0.0;
+
+            final double effectivePayment = rawTotal > 0 ? rawTotal : (rawCash + rawCheck);
+            final double projectedBalance = customer.currentBalance - effectivePayment;
+
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.receipt_long, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Text('سند قبض جديد / קבלה חדשה', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    customer.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'الرصيد الحالي: ${formatCurrency(customer.currentBalance)}',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: receiptNumberCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم السند / מספר קבלה',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: totalAmountCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'المبلغ الإجمالي / סכום כולל (₪)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.5)),
+                        ),
+                        child: Text(
+                          'الرصيد بعد السداد: ${formatCurrency(projectedBalance)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Color(AppColorValues.primaryGold),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'تفاصيل الدفع / פירוט תשלום:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: cashAmountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'المبلغ نقداً / מזומן (₪)',
+                          prefixIcon: Icon(Icons.money),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: checkAmountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'مبلغ الشيك / סכום שיק (₪)',
+                          prefixIcon: Icon(Icons.payment),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: checkNumberCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم الشيك / מספר שיק',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: bankNameCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'اسم البنك / שם הבנק',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: dueDate,
+                            firstDate: DateTime(2025),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              dueDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade700),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'تاريخ استحقاق الشيك: ${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              const Icon(Icons.calendar_today, size: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (validationError != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          validationError!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('إصدار السند وتحديث الكشف'),
+                  onPressed: () {
+                    final receiptNumber = receiptNumberCtrl.text.trim();
+                    if (receiptNumber.isEmpty) {
+                      setDialogState(() {
+                        validationError = 'يرجى إدخال رقم السند';
+                      });
+                      return;
+                    }
+
+                    double total = double.tryParse(totalAmountCtrl.text.trim()) ?? 0.0;
+                    final cash = double.tryParse(cashAmountCtrl.text.trim()) ?? 0.0;
+                    final check = double.tryParse(checkAmountCtrl.text.trim()) ?? 0.0;
+
+                    if (total <= 0) {
+                      total = cash + check;
+                    }
+
+                    if (total <= 0) {
+                      setDialogState(() {
+                        validationError = 'يرجى إدخال مبلغ صحيح أكبر من الصفر';
+                      });
+                      return;
+                    }
+
+                    final List<ReceiptPaymentItem> payments = [];
+                    if (cash > 0) {
+                      payments.add(
+                        ReceiptPaymentItem(
+                          method: PaymentMethod.cash,
+                          amount: cash,
+                          reference: 'نقداً',
+                        ),
+                      );
+                    }
+                    if (check > 0) {
+                      final chkNum = checkNumberCtrl.text.trim();
+                      final bnk = bankNameCtrl.text.trim();
+                      if (chkNum.isEmpty || bnk.isEmpty) {
+                        setDialogState(() {
+                          validationError = 'يرجى إدخال رقم الشيك واسم البنك';
+                        });
+                        return;
+                      }
+                      payments.add(
+                        ReceiptPaymentItem(
+                          method: PaymentMethod.check,
+                          amount: check,
+                          checkNumber: chkNum,
+                          bankName: bnk,
+                          dueDate: dueDate,
+                          drawerName: customer.name,
+                        ),
+                      );
+                    }
+
+                    if (payments.isEmpty) {
+                      payments.add(
+                        ReceiptPaymentItem(
+                          method: PaymentMethod.cash,
+                          amount: total,
+                          reference: 'نقداً',
+                        ),
+                      );
+                    }
+
+                    final allocatedSum = payments.fold<double>(0.0, (s, p) => s + p.amount);
+                    if ((allocatedSum - total).abs() > 0.01) {
+                      setDialogState(() {
+                        validationError =
+                            'مجموع طرق الدفع (${formatCurrency(allocatedSum)}) لا يطابق المبلغ الإجمالي (${formatCurrency(total)})';
+                      });
+                      return;
+                    }
+
+                    try {
+                      final input = CreateReceiptInput(
+                        receiptNumber: receiptNumber,
+                        date: DateTime.now(),
+                        amount: total,
+                        payments: payments,
+                        notes: 'سند قبض دفعات على الحساب',
+                        createdBy: 'diaaldin',
+                      );
+
+                      final result = ReceiptService.processCustomerReceipt(
+                        contact: customer,
+                        input: input,
+                      );
+
+                      setState(() {
+                        _contacts[0] = result.updatedContact;
+                        _statementController.updateContact(result.updatedContact);
+                        _statementController.addEntry(result.statementEntry);
+                        for (final chk in result.createdChecks) {
+                          _checksController.addCheck(chk);
+                        }
+                        _posController.setCustomer(result.updatedContact);
+                      });
+
+                      Navigator.of(dialogCtx).pop();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'تم إصدار سند القبض رقم ${result.receipt.receiptNumber} بنجاح وتحديث كشف الحساب',
+                          ),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() {
+                        validationError = 'خطأ في معالجة السند: $e';
+                      });
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
