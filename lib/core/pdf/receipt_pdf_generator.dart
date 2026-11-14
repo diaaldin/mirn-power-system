@@ -22,10 +22,12 @@ class ReceiptPdfGenerator {
     required CompanyInfo company,
     required double previousBalance,
     required double newBalance,
+    pw.Font? baseFont,
+    pw.Font? boldFont,
   }) async {
     final docTheme = pw.ThemeData.withFont(
-      base: pw.Font.helvetica(),
-      bold: pw.Font.helveticaBold(),
+      base: baseFont ?? pw.Font.helvetica(),
+      bold: boldFont ?? pw.Font.helveticaBold(),
     );
 
     final pdf = pw.Document(theme: docTheme);

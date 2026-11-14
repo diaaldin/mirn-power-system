@@ -1255,6 +1255,13 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      receiptNumberCtrl.dispose();
+      totalAmountCtrl.dispose();
+      cashAmountCtrl.dispose();
+      checkAmountCtrl.dispose();
+      checkNumberCtrl.dispose();
+      bankNameCtrl.dispose();
+    });
   }
 }

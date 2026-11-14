@@ -117,7 +117,7 @@ class ReceiptService {
 
     // 4. Construct PaymentReceipt (enforces payment balancing within 0.01)
     final receiptId = (input.id != null && input.id!.trim().isNotEmpty)
-        ? input.id!
+        ? input.id!.trim()
         : 'rec-${input.receiptNumber}';
 
     final receipt = PaymentReceipt(
@@ -241,7 +241,7 @@ class ReceiptService {
 
     // 4. Construct PaymentReceipt (enforces payment balancing within 0.01)
     final voucherId = (input.id != null && input.id!.trim().isNotEmpty)
-        ? input.id!
+        ? input.id!.trim()
         : 'pay-${input.paymentNumber}';
 
     final paymentVoucher = PaymentReceipt(
