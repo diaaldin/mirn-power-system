@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/app_locale.dart';
+import 'core/pdf/delivery_note_pdf_generator.dart';
 import 'core/pdf/invoice_pdf_generator.dart';
 import 'core/pdf/purchase_pdf_generator.dart';
 import 'core/theme/mirn_theme.dart';
@@ -11,8 +12,13 @@ import 'features/accounts/presentation/screens/statement_screen.dart';
 import 'features/checks/domain/models/check_record.dart';
 import 'features/checks/presentation/screens/checks_screen.dart';
 import 'features/dashboard/presentation/widgets/navigation_shell.dart';
+import 'features/fleet/domain/models/driver.dart';
+import 'features/fleet/domain/models/vehicle.dart';
 import 'features/inventory/domain/models/product.dart';
 import 'features/inventory/domain/services/unit_converter.dart';
+import 'features/logistics/domain/models/dispatch.dart';
+import 'features/logistics/domain/services/dispatch_service.dart';
+import 'features/logistics/presentation/controllers/fleet_dispatch_controller.dart';
 import 'features/purchases/domain/models/purchase_invoice.dart';
 import 'features/purchases/domain/services/purchase_service.dart';
 import 'features/purchases/presentation/controllers/purchases_controller.dart';
@@ -186,9 +192,68 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     ),
   ];
 
+  // Mock Fleet & Dispatches
+  final List<Vehicle> _vehicles = [
+    const Vehicle(
+      id: 'veh-01',
+      name: 'مرسيدس أكتروس 3340 (شاحنة قلاب 30 طن) / מרצדס אקטרוס',
+      plateNumber: '72-491-88',
+      modelYear: 2021,
+      currentOdometer: 142500,
+      status: VehicleStatus.active,
+      notes: 'قلاب تفريغ خلفي - مخصصة للصخور والأتربة',
+    ),
+    const Vehicle(
+      id: 'veh-02',
+      name: 'فولفو FH16 (قاطرة ومقطورة حجر وبلوكات) / וולוו פול-טריילר',
+      plateNumber: '88-301-22',
+      modelYear: 2023,
+      currentOdometer: 98200,
+      status: VehicleStatus.active,
+      notes: 'مقطورة مسطحة مع رافعة شوكية خلفية',
+    ),
+    const Vehicle(
+      id: 'veh-03',
+      name: 'إيسوزو ريفارد 7.5 طن (توزيع سيراميك وصحي) / איסוזו חלוקה',
+      plateNumber: '55-123-90',
+      modelYear: 2020,
+      currentOdometer: 184000,
+      status: VehicleStatus.maintenance,
+      notes: 'صيانة دورية للمكابح والإطارات',
+    ),
+  ];
+
+  final List<Driver> _drivers = [
+    const Driver(
+      id: 'drv-01',
+      fullName: 'محمود عيسى / מחמוד עיסא',
+      phone: '052-9876543',
+      licenseNumber: 'LIC-88192',
+      status: DriverStatus.active,
+      notes: 'رخصة شحن ثقيل فوق 15 طن',
+    ),
+    const Driver(
+      id: 'drv-02',
+      fullName: 'خليل سميح / חליל סמיח',
+      phone: '054-3210987',
+      licenseNumber: 'LIC-55421',
+      status: DriverStatus.active,
+      notes: 'رخصة قاطرة ومقطورة (E)',
+    ),
+    const Driver(
+      id: 'drv-03',
+      fullName: 'إبراهيم ناصر / אבראהים נאצר',
+      phone: '050-7654321',
+      licenseNumber: 'LIC-99302',
+      status: DriverStatus.inactive,
+      notes: 'إجازة سنوية',
+    ),
+  ];
+
   // Mock Controllers
   late final ChecksScreenController _checksController;
   late final StatementScreenController _statementController;
+  late final FleetDispatchController _fleetController;
   final SalesPosController _posController = SalesPosController();
 
   @override
@@ -307,6 +372,74 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       quantity: 50.0,
       unit: UnitType.meter,
       unitPriceInput: 327.60,
+    );
+
+    final initialDispatches = [
+      Dispatch(
+        id: 'DSP-2026-00001',
+        dispatchNumber: 'DSP-2026-00001',
+        date: DateTime(2026, 11, 14, 10, 0),
+        saleId: 'sale-001',
+        invoiceNumber: 'INV-2026-00412',
+        customerId: 'cust-101',
+        customerName: 'شركة البراق للمقاولات / חברת אל-בוראק',
+        customerPhone: '052-1234567',
+        deliveryAddress: 'رام الله - حي الماصيون / רמאללה',
+        cargoDescription: '150 م² رخام كرارا + 4 كراسي حمام جروهي',
+        vehicleId: 'veh-01',
+        vehicleName: 'مرسيدس أكتروس 3340',
+        plateNumber: '72-491-88',
+        driverId: 'drv-01',
+        driverName: 'محمود عيسى',
+        status: DispatchStatus.dispatched,
+        notes: 'توصيل موقع البرج الطابق الأرضي',
+        updatedAt: DateTime(2026, 11, 14, 10, 30),
+      ),
+      Dispatch(
+        id: 'DSP-2026-00002',
+        dispatchNumber: 'DSP-2026-00002',
+        date: DateTime(2026, 11, 14, 8, 30),
+        saleId: 'sale-002',
+        invoiceNumber: 'INV-2026-00389',
+        customerId: 'cust-102',
+        customerName: 'مكتب القدس للتصميم الداخلي / ירושלים עיצוב',
+        customerPhone: '054-9988776',
+        deliveryAddress: 'القدس - شارع يافا 45 / ירושלים רחוב יפו',
+        cargoDescription: '80 م² بورسلان إسباني + 2 خلاط مغسلة',
+        vehicleId: 'veh-02',
+        vehicleName: 'فولفو FH16',
+        plateNumber: '88-301-22',
+        driverId: 'drv-02',
+        driverName: 'خليل سميح',
+        status: DispatchStatus.delivered,
+        notes: 'تم التسليم والتوقيع بالكامل',
+        updatedAt: DateTime(2026, 11, 14, 13, 0),
+      ),
+      Dispatch(
+        id: 'DSP-2026-00003',
+        dispatchNumber: 'DSP-2026-00003',
+        date: DateTime(2026, 11, 14, 14, 0),
+        saleId: null,
+        invoiceNumber: null,
+        customerId: 'cust-101',
+        customerName: 'شركة البراق للمقاولات / חברת אל-בוראק',
+        customerPhone: '052-1234567',
+        deliveryAddress: 'بيت لحم - المنطقة الصناعية / בית לחם',
+        cargoDescription: '25 طن حصمة وحجر بناء أبيض مقاس 30',
+        vehicleId: 'veh-01',
+        vehicleName: 'مرسيدس أكتروس 3340',
+        plateNumber: '72-491-88',
+        driverId: 'drv-01',
+        driverName: 'محمود عيسى',
+        status: DispatchStatus.pending,
+        notes: 'بانتظار اكتمال التحميل من الكسارة',
+        updatedAt: DateTime(2026, 11, 14, 14, 0),
+      ),
+    ];
+
+    _fleetController = FleetDispatchController(
+      initial: initialDispatches,
+      initialSeq: 4,
     );
   }
 
@@ -1283,72 +1416,1007 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   }
 
   Widget _buildFleetScreen() {
+    final state = _fleetController.state;
+    final activeTrucksCount = _vehicles.where((v) => v.status == VehicleStatus.active).length;
+    final totalFleetKm = _vehicles.fold<int>(0, (sum, v) => sum + v.currentOdometer);
+    final activeDispatchesCount = state.dispatches
+        .where((d) => d.status == DispatchStatus.pending || d.status == DispatchStatus.dispatched)
+        .length;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildSectionHeader('إدارة أسطول الشاحنات وتكلفة الكيلومتر / צי רכב והובלות'),
+        // 1. Header & Quick Action
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: _buildSectionHeader(
+                _currentLanguage == AppLanguage.arabic
+                    ? 'إدارة أسطول الشاحنات واللوجستيات / צי רכב והובלות'
+                    : 'צי רכב והובלות / أسطول الشاحنات واللوجستيات',
+              ),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(AppColorValues.primaryGold),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              icon: const Icon(Icons.add_road, size: 20),
+              label: Text(
+                _currentLanguage == AppLanguage.arabic
+                    ? 'أمر إرسالية ونقل جديد'
+                    : 'תעודת משלוח חדשה',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: _showNewDispatchDialog,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 2. Fleet KPI Banner
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic ? 'الشاحنات العاملة' : 'משאיות פעילות',
+              value: '$activeTrucksCount / ${_vehicles.length}',
+              icon: Icons.local_shipping,
+              color: const Color(AppColorValues.successGreen),
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic ? 'إجمالي كيلومترات الأسطول' : 'סה"כ ק"מ צי',
+              value: '$totalFleetKm كم',
+              icon: Icons.speed,
+              color: const Color(AppColorValues.infoBlue),
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic ? 'إرساليات قيد التنفيذ' : 'משלוחים בביצוע',
+              value: '$activeDispatchesCount',
+              icon: Icons.route,
+              color: const Color(AppColorValues.warningOrange),
+            ),
+            _buildKpiCard(
+              title: _currentLanguage == AppLanguage.arabic ? 'متوسط تكلفة التشغيل' : 'עלות ממוצעת לק"מ',
+              value: '₪ 4.85 / كم',
+              icon: Icons.analytics,
+              color: Colors.teal,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // 3. Status Filter Chips
+        Row(
+          children: [
+            Text(
+              _currentLanguage == AppLanguage.arabic ? 'تصفية الإرساليات:' : 'סינון משלוחים:',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildDispatchFilterChip(
+                      label: _currentLanguage == AppLanguage.arabic ? 'الكل' : 'הכל',
+                      isSelected: state.statusFilter == null,
+                      onSelected: () {
+                        setState(() => _fleetController.setStatusFilter(null));
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _buildDispatchFilterChip(
+                      label: DispatchStatus.pending.arabicLabel,
+                      isSelected: state.statusFilter == DispatchStatus.pending,
+                      onSelected: () {
+                        setState(() => _fleetController.setStatusFilter(DispatchStatus.pending));
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _buildDispatchFilterChip(
+                      label: DispatchStatus.dispatched.arabicLabel,
+                      isSelected: state.statusFilter == DispatchStatus.dispatched,
+                      onSelected: () {
+                        setState(() => _fleetController.setStatusFilter(DispatchStatus.dispatched));
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _buildDispatchFilterChip(
+                      label: DispatchStatus.delivered.arabicLabel,
+                      isSelected: state.statusFilter == DispatchStatus.delivered,
+                      onSelected: () {
+                        setState(() => _fleetController.setStatusFilter(DispatchStatus.delivered));
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _buildDispatchFilterChip(
+                      label: _currentLanguage == AppLanguage.arabic ? 'معاد / ملغي' : 'הוחזר / מבוטל',
+                      isSelected: state.statusFilter == DispatchStatus.cancelled ||
+                          state.statusFilter == DispatchStatus.returned,
+                      onSelected: () {
+                        setState(() => _fleetController.setStatusFilter(DispatchStatus.cancelled));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 4. Dispatches Board / List
+        if (state.filteredDispatches.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.inbox, size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'لا توجد إرساليات مطابقة للفلتر المحدد'
+                          : 'אין משלוחים התואמים לסינון הנבחר',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...state.filteredDispatches.map((dispatch) => _buildDispatchCard(dispatch)),
+
+        const SizedBox(height: 28),
+
+        // 5. Fleet Trucks Directory
+        _buildSectionHeader(
+          _currentLanguage == AppLanguage.arabic
+              ? 'دليل شاحنات ومركبات الأسطول / צי כלי רכב'
+              : 'צי כלי רכב / دليل شاحنات ومركبات الأسطول',
+        ),
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.teal,
-                    child: Icon(Icons.local_shipping, color: Colors.white),
-                  ),
-                  title: Text('مرسيدس أكتروس 3340 (شاحنة قلاب 30 طن)'),
-                  subtitle: Text('رقم اللوحة: 72-491-88 | السائق: محمود عيسى'),
-                  trailing: Text('₪ 4.60 / كم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(AppColorValues.primaryGold))),
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: const [
-                    Text('العداد: 142,500 كم'),
-                    Text('الوقود: ₪ 18,400'),
-                    Text('الصيانة: ₪ 4,600'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.indigo,
-                    child: Icon(Icons.local_shipping, color: Colors.white),
-                  ),
-                  title: Text('فولفو FH16 (قاطرة ومقطورة حجر وبلوكات)'),
-                  subtitle: Text('رقم اللوحة: 88-301-22 | السائق: خليل سميح'),
-                  trailing: Text('₪ 5.10 / كم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(AppColorValues.primaryGold))),
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: const [
-                    Text('العداد: 98,200 كم'),
-                    Text('الوقود: ₪ 22,100'),
-                    Text('الصيانة: ₪ 3,400'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+        ..._vehicles.map((v) => _buildTruckCard(v)),
       ],
     );
+  }
+
+  Widget _buildDispatchFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onSelected,
+  }) {
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.black : Colors.white)),
+      selected: isSelected,
+      selectedColor: const Color(AppColorValues.primaryGold),
+      backgroundColor: const Color(AppColorValues.cardDark),
+      onSelected: (_) => onSelected(),
+    );
+  }
+
+  Widget _buildDispatchCard(Dispatch dispatch) {
+    Color statusColor;
+    IconData statusIcon;
+    switch (dispatch.status) {
+      case DispatchStatus.pending:
+        statusColor = const Color(AppColorValues.warningOrange);
+        statusIcon = Icons.hourglass_top;
+        break;
+      case DispatchStatus.dispatched:
+        statusColor = const Color(AppColorValues.infoBlue);
+        statusIcon = Icons.local_shipping;
+        break;
+      case DispatchStatus.delivered:
+        statusColor = const Color(AppColorValues.successGreen);
+        statusIcon = Icons.check_circle;
+        break;
+      case DispatchStatus.returned:
+      case DispatchStatus.cancelled:
+        statusColor = Colors.redAccent;
+        statusIcon = Icons.cancel;
+        break;
+    }
+
+    final dateStr =
+        '${dispatch.date.year}-${dispatch.date.month.toString().padLeft(2, '0')}-${dispatch.date.day.toString().padLeft(2, '0')}';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Row: Dispatch #, Status, Date
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(AppColorValues.primaryGold)),
+                      ),
+                      child: Text(
+                        dispatch.dispatchNumber,
+                        style: const TextStyle(
+                          color: Color(AppColorValues.primaryGold),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, color: statusColor, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            _currentLanguage == AppLanguage.arabic
+                                ? dispatch.status.arabicLabel
+                                : dispatch.status.hebrewLabel,
+                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  dateStr,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Customer & Delivery Address
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.person_pin_circle_outlined, size: 18, color: Colors.grey),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${dispatch.customerName} (${dispatch.customerPhone})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        dispatch.deliveryAddress,
+                        style: const TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                if (dispatch.invoiceNumber != null && dispatch.invoiceNumber!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'فاتورة: ${dispatch.invoiceNumber}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Cargo Description Box
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(AppColorValues.surfaceDark),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined, size: 16, color: Color(AppColorValues.primaryGold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'الحمولة: ${dispatch.cargoDescription}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Vehicle & Driver Details
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_shipping_outlined, size: 16, color: Colors.teal),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${dispatch.vehicleName} [${dispatch.plateNumber}]',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.badge_outlined, size: 16, color: Colors.blueAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'السائق: ${dispatch.driverName}',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+
+            // Actions Row
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // 1. Advance to Dispatched
+                if (dispatch.status == DispatchStatus.pending)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(AppColorValues.infoBlue),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    icon: const Icon(Icons.directions_run, size: 16),
+                    label: const Text('بدء النقل / יצא לדרך', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      setState(() {
+                        _fleetController.advanceStatus(
+                          dispatchId: dispatch.id,
+                          newStatus: DispatchStatus.dispatched,
+                        );
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم بدء نقل الإرسالية ${dispatch.dispatchNumber}'),
+                          backgroundColor: const Color(AppColorValues.infoBlue),
+                        ),
+                      );
+                    },
+                  ),
+
+                // 2. Complete Delivery
+                if (dispatch.status == DispatchStatus.dispatched)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(AppColorValues.successGreen),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('تأكيد التسليم / אשר מסירה', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => _showCompleteDeliveryDialog(dispatch),
+                  ),
+
+                // 3. Cancel
+                if (!DispatchService.isTerminal(dispatch.status))
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('إلغاء / ביטול', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      setState(() {
+                        _fleetController.cancelDispatch(dispatch.id, reason: 'ملغي من قبل المستخدم');
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('تم إلغاء الإرسالية ${dispatch.dispatchNumber}')),
+                      );
+                    },
+                  ),
+
+                // 4. A4 PDF Delivery Note Preview
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(AppColorValues.primaryGold),
+                    side: const BorderSide(color: Color(AppColorValues.primaryGold)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf, size: 16),
+                  label: const Text('توليد سند إرسالية A4 PDF', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _showDeliveryNotePdfPreview(dispatch),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTruckCard(Vehicle vehicle) {
+    Color statusColor;
+    switch (vehicle.status) {
+      case VehicleStatus.active:
+        statusColor = const Color(AppColorValues.successGreen);
+        break;
+      case VehicleStatus.maintenance:
+        statusColor = const Color(AppColorValues.warningOrange);
+        break;
+      case VehicleStatus.inactive:
+        statusColor = Colors.grey;
+        break;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: statusColor.withValues(alpha: 0.2),
+                child: Icon(Icons.local_shipping, color: statusColor),
+              ),
+              title: Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(
+                'رقم اللوحة: ${vehicle.plateNumber} | سنة الصنع: ${vehicle.modelYear ?? "N/A"}${vehicle.notes != null ? " | ${vehicle.notes}" : ""}',
+              ),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _currentLanguage == AppLanguage.arabic
+                      ? vehicle.status.arabicLabel
+                      : vehicle.status.hebrewLabel,
+                  style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text('العداد: ${vehicle.currentOdometer} كم', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Text('الوقود: ₪ 18,400', style: TextStyle(color: Colors.grey)),
+                const Text('الصيانة: ₪ 4,600', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNewDispatchDialog() {
+    final activeVehicles = _vehicles.where((v) => v.status == VehicleStatus.active).toList();
+    final activeDrivers = _drivers.where((d) => d.status == DriverStatus.active).toList();
+
+    if (activeVehicles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد شاحنات فعالة ومتاحة للإرسال')),
+      );
+      return;
+    }
+
+    if (activeDrivers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد سائقون فعالون ومتاحون للخدمة')),
+      );
+      return;
+    }
+
+    final addressCtrl = TextEditingController(text: _contacts.first.address);
+    final cargoCtrl = TextEditingController(text: '100 م² رخام كرارا + 2 خلاط نحاسي');
+    final invoiceCtrl = TextEditingController(text: 'INV-2026-00412');
+    final notesCtrl = TextEditingController();
+
+    Contact selectedCustomer = _contacts.first;
+    Vehicle selectedVehicle = activeVehicles.first;
+    Driver selectedDriver = activeDrivers.first;
+    String? validationError;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: const [
+                  Icon(Icons.add_road, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Text('أمر إرسالية ونقل جديد / תעודת משלוח', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (validationError != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.redAccent),
+                          ),
+                          child: Text(validationError!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                        ),
+
+                      // Customer Selector
+                      const Text('الزبون / לקוח', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      DropdownButtonFormField<Contact>(
+                        initialValue: selectedCustomer,
+                        isExpanded: true,
+                        decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        items: _contacts.map((c) {
+                          return DropdownMenuItem(value: c, child: Text(c.name, overflow: TextOverflow.ellipsis));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedCustomer = val;
+                              addressCtrl.text = val.address;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Delivery Address
+                      const Text('عنوان التوصيل وموقع التفريغ / כתובת אספקה', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: addressCtrl,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'المدينة، الشارع، تفاصيل الموقع',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Cargo Description
+                      const Text('وصف الحمولة والأصناف / פירוט המטען', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: cargoCtrl,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'مثال: 120 م² سيراميك، 4 أطقم خلاطات',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Vehicle & Driver Pickers
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('الشاحنة / משאית', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                const SizedBox(height: 4),
+                                DropdownButtonFormField<Vehicle>(
+                                  initialValue: selectedVehicle,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                                  items: activeVehicles.map((v) {
+                                    return DropdownMenuItem(value: v, child: Text(v.plateNumber, style: const TextStyle(fontSize: 13)));
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) setDialogState(() => selectedVehicle = val);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('السائق / נהג', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                const SizedBox(height: 4),
+                                DropdownButtonFormField<Driver>(
+                                  initialValue: selectedDriver,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                                  items: activeDrivers.map((d) {
+                                    return DropdownMenuItem(value: d, child: Text(d.fullName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis));
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) setDialogState(() => selectedDriver = val);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Invoice Reference & Notes
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('رقم الفاتورة المرتبطة (اختياري)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                const SizedBox(height: 4),
+                                TextField(
+                                  controller: invoiceCtrl,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    hintText: 'INV-2026-xxxxx',
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text('إنشاء الإرسالية / צור משלוח', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    final address = addressCtrl.text.trim();
+                    final cargo = cargoCtrl.text.trim();
+                    if (address.isEmpty) {
+                      setDialogState(() => validationError = 'يرجى كتابة عنوان التوصيل');
+                      return;
+                    }
+                    if (cargo.isEmpty) {
+                      setDialogState(() => validationError = 'يرجى كتابة وصف الحمولة');
+                      return;
+                    }
+
+                    try {
+                      _fleetController.setCustomer(
+                        id: selectedCustomer.id,
+                        name: selectedCustomer.name,
+                        phone: selectedCustomer.phone,
+                      );
+                      _fleetController.setVehicle(
+                        id: selectedVehicle.id,
+                        name: selectedVehicle.name,
+                        plateNumber: selectedVehicle.plateNumber,
+                      );
+                      _fleetController.setDriver(
+                        id: selectedDriver.id,
+                        name: selectedDriver.fullName,
+                      );
+                      _fleetController.setDeliveryAddress(address);
+                      _fleetController.setCargoDescription(cargo);
+                      final inv = invoiceCtrl.text.trim();
+                      if (inv.isNotEmpty) {
+                        _fleetController.setInvoiceRef(invoiceNumber: inv);
+                      }
+                      final notes = notesCtrl.text.trim();
+                      if (notes.isNotEmpty) {
+                        _fleetController.setFormNotes(notes);
+                      }
+
+                      final newDispatch = _fleetController.submitNewDispatch();
+
+                      setState(() {});
+                      Navigator.of(dialogCtx).pop();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم إنشاء أمر الإرسالية ${newDispatch.dispatchNumber} بنجاح'),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                          action: SnackBarAction(
+                            label: 'معاينة PDF',
+                            textColor: Colors.black,
+                            onPressed: () => _showDeliveryNotePdfPreview(newDispatch),
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() => validationError = 'خطأ في إنشاء أمر الإرسالية: $e');
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      addressCtrl.dispose();
+      cargoCtrl.dispose();
+      invoiceCtrl.dispose();
+      notesCtrl.dispose();
+    });
+  }
+
+  void _showCompleteDeliveryDialog(Dispatch dispatch) {
+    final vehicle = _vehicles.firstWhere(
+      (v) => v.id == dispatch.vehicleId,
+      orElse: () => _vehicles.first,
+    );
+    final suggestedOdo = vehicle.currentOdometer + 45;
+    final odoCtrl = TextEditingController(text: suggestedOdo.toString());
+    String? errorMsg;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: const [
+                  Icon(Icons.check_circle, color: Color(AppColorValues.successGreen)),
+                  SizedBox(width: 8),
+                  Text('تأكيد تسليم الإرسالية / אישור מסירה', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('الإرسالية: ${dispatch.dispatchNumber}'),
+                  const SizedBox(height: 4),
+                  Text('الشاحنة: ${vehicle.name} (${vehicle.plateNumber})'),
+                  const SizedBox(height: 4),
+                  Text('العداد السابق: ${vehicle.currentOdometer} كم', style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  const Text('قراءة العداد عند اكتمال التسليم (كم):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: odoCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: errorMsg,
+                      suffixText: 'كم',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.successGreen),
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text('تأكيد التسليم / אשר מסירה', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    final odo = int.tryParse(odoCtrl.text.trim());
+                    if (odo == null || odo < vehicle.currentOdometer) {
+                      setDialogState(() {
+                        errorMsg = 'يجب أن يكون العداد أكبر من أو يساوي ${vehicle.currentOdometer} كم';
+                      });
+                      return;
+                    }
+
+                    try {
+                      final result = _fleetController.advanceStatus(
+                        dispatchId: dispatch.id,
+                        newStatus: DispatchStatus.delivered,
+                        completionOdometer: odo,
+                      );
+
+                      // Update vehicle in _vehicles list if returned
+                      if (result.updatedVehicle != null) {
+                        final vIdx = _vehicles.indexWhere((v) => v.id == result.updatedVehicle!.id);
+                        if (vIdx >= 0) {
+                          _vehicles[vIdx] = result.updatedVehicle!;
+                        }
+                      }
+
+                      setState(() {});
+                      Navigator.of(dialogCtx).pop();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم تأكيد تسليم الإرسالية ${dispatch.dispatchNumber} وتحديث عداد الشاحنة إلى $odo كم'),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() => errorMsg = 'خطأ: $e');
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      odoCtrl.dispose();
+    });
+  }
+
+  void _showDeliveryNotePdfPreview(Dispatch dispatch) async {
+    const company = CompanyInfo(
+      name: 'M.I.R.N POWER Ltd.',
+      nameArabic: 'شركة م.ي.ר.ن باور م.ض',
+      nameHebrew: 'מ.י.ר.ן פאוור בע"מ',
+      subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
+      subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
+      taxId: '515892104',
+      phone: '02-1234567',
+      address: 'אזור התעשייה עטרות / عطروت, ירושלים',
+    );
+
+    try {
+      final bytes = await DeliveryNotePdfGenerator.generate(
+        dispatch: dispatch,
+        company: company,
+      );
+
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Color(AppColorValues.primaryGold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'معاينة سند الإرسالية: ${dispatch.dispatchNumber}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.greenAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'تم توليد سند الإرسالية A4 PDF بنجاح (${(bytes.length / 1024).toStringAsFixed(1)} KB) وفق معايير תעודת משלוח והובלה الرسمية.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الزبون / לקוח'),
+                    subtitle: Text('${dispatch.customerName} - ${dispatch.customerPhone}'),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('عنوان التوصيل'),
+                    subtitle: Text(dispatch.deliveryAddress),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الشاحنة والسائق'),
+                    subtitle: Text('${dispatch.vehicleName} [${dispatch.plateNumber}] - ${dispatch.driverName}'),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('وصف الحمولة'),
+                    subtitle: Text(dispatch.cargoDescription),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('إغلاق / סגור'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(AppColorValues.primaryGold),
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.print, size: 18),
+                label: const Text('طباعة سند الإرسالية / הדפסה'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرسال سند الإرسالية إلى الطابعة')),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في توليد PDF: $e')),
+      );
+    }
   }
 
   Widget _buildSectionHeader(String title) {
