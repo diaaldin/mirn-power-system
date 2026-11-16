@@ -2144,10 +2144,13 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                         id: selectedVehicle.id,
                         name: selectedVehicle.name,
                         plateNumber: selectedVehicle.plateNumber,
+                        status: selectedVehicle.status,
+                        currentOdometer: selectedVehicle.currentOdometer,
                       );
                       _fleetController.setDriver(
                         id: selectedDriver.id,
                         name: selectedDriver.fullName,
+                        status: selectedDriver.status,
                       );
                       _fleetController.setDeliveryAddress(address);
                       _fleetController.setCargoDescription(cargo);
@@ -2263,6 +2266,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       final result = _fleetController.advanceStatus(
                         dispatchId: dispatch.id,
                         newStatus: DispatchStatus.delivered,
+                        vehicle: vehicle,
                         completionOdometer: odo,
                       );
 
@@ -2301,7 +2305,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   void _showDeliveryNotePdfPreview(Dispatch dispatch) async {
     const company = CompanyInfo(
       name: 'M.I.R.N POWER Ltd.',
-      nameArabic: 'شركة م.ي.ר.ن باور م.ض',
+      nameArabic: 'شركة م.ي.ر.ن باور م.ض',
       nameHebrew: 'מ.י.ר.ן פאוור בע"מ',
       subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
       subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
@@ -3411,7 +3415,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   void _showPurchasePdfPreview(PurchaseInvoice invoice, [Contact? supplier]) async {
     const company = CompanyInfo(
       name: 'M.I.R.N POWER Ltd.',
-      nameArabic: 'شركة م.ي.ר.ن باور م.ض',
+      nameArabic: 'شركة م.ي.ر.ن باور م.ض',
       nameHebrew: 'מ.י.ר.ן פאוור בע"מ',
       subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
       subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',

@@ -37,7 +37,10 @@ class DeliveryNotePdfGenerator {
     final hebrewName = company.nameHebrew ?? company.name;
     final arabicName = company.nameArabic ?? company.name;
 
-    final invoiceRef = dispatch.invoiceNumber ?? 'N/A';
+    final invoiceRef = (dispatch.invoiceNumber != null &&
+            dispatch.invoiceNumber!.trim().isNotEmpty)
+        ? dispatch.invoiceNumber!.trim()
+        : 'N/A';
     final deliveryFeeText =
         deliveryFee != null ? formatCurrency(deliveryFee) : 'N/A';
 
@@ -80,6 +83,24 @@ class DeliveryNotePdfGenerator {
                               fontSize: 13,
                               fontWeight: pw.FontWeight.bold,
                               color: _darkSlate,
+                            ),
+                          ),
+                        if (company.subtitleHebrew != null &&
+                            company.subtitleHebrew!.isNotEmpty)
+                          pw.Text(
+                            company.subtitleHebrew!,
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        if (company.subtitleArabic != null &&
+                            company.subtitleArabic!.isNotEmpty)
+                          pw.Text(
+                            company.subtitleArabic!,
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
                             ),
                           ),
                         pw.SizedBox(height: 3),
@@ -213,6 +234,37 @@ class DeliveryNotePdfGenerator {
                   [dispatch.cargoDescription],
                 ],
               ),
+              if (dispatch.notes != null && dispatch.notes!.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 6),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    color: _lightGrey,
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                    borderRadius: pw.BorderRadius.circular(3),
+                  ),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'הערות והנחיות אספקה / ملاحظات وتعليمات التوصيل: ',
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _goldColor,
+                        ),
+                      ),
+                      pw.Expanded(
+                        child: pw.Text(
+                          dispatch.notes!.trim(),
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               pw.SizedBox(height: 12),
 
               // 4. Transport Details Row

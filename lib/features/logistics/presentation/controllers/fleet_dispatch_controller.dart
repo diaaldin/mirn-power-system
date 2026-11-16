@@ -17,8 +17,11 @@ class FleetDispatchState {
   final String? vehicleId;
   final String? vehicleName;
   final String? plateNumber;
+  final VehicleStatus? vehicleStatus;
+  final int? vehicleOdometer;
   final String? driverId;
   final String? driverName;
+  final DriverStatus? driverStatus;
   final String deliveryAddress;
   final String cargoDescription;
   final String? invoiceNumber;
@@ -40,8 +43,11 @@ class FleetDispatchState {
     this.vehicleId,
     this.vehicleName,
     this.plateNumber,
+    this.vehicleStatus,
+    this.vehicleOdometer,
     this.driverId,
     this.driverName,
+    this.driverStatus,
     this.deliveryAddress = '',
     this.cargoDescription = '',
     this.invoiceNumber,
@@ -66,10 +72,16 @@ class FleetDispatchState {
     bool clearVehicleName = false,
     String? plateNumber,
     bool clearPlateNumber = false,
+    VehicleStatus? vehicleStatus,
+    bool clearVehicleStatus = false,
+    int? vehicleOdometer,
+    bool clearVehicleOdometer = false,
     String? driverId,
     bool clearDriverId = false,
     String? driverName,
     bool clearDriverName = false,
+    DriverStatus? driverStatus,
+    bool clearDriverStatus = false,
     String? deliveryAddress,
     String? cargoDescription,
     String? invoiceNumber,
@@ -94,8 +106,11 @@ class FleetDispatchState {
       vehicleId: clearVehicleId ? null : (vehicleId ?? this.vehicleId),
       vehicleName: clearVehicleName ? null : (vehicleName ?? this.vehicleName),
       plateNumber: clearPlateNumber ? null : (plateNumber ?? this.plateNumber),
+      vehicleStatus: clearVehicleStatus ? null : (vehicleStatus ?? this.vehicleStatus),
+      vehicleOdometer: clearVehicleOdometer ? null : (vehicleOdometer ?? this.vehicleOdometer),
       driverId: clearDriverId ? null : (driverId ?? this.driverId),
       driverName: clearDriverName ? null : (driverName ?? this.driverName),
+      driverStatus: clearDriverStatus ? null : (driverStatus ?? this.driverStatus),
       deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       cargoDescription: cargoDescription ?? this.cargoDescription,
       invoiceNumber: clearInvoiceNumber ? null : (invoiceNumber ?? this.invoiceNumber),
@@ -148,17 +163,29 @@ class FleetDispatchController {
     required String id,
     required String name,
     required String plateNumber,
+    VehicleStatus status = VehicleStatus.active,
+    int currentOdometer = 0,
   }) {
     _state = _state.copyWith(
       vehicleId: id,
       vehicleName: name,
       plateNumber: plateNumber,
+      vehicleStatus: status,
+      vehicleOdometer: currentOdometer,
     );
     _applyFilter();
   }
 
-  void setDriver({required String id, required String name}) {
-    _state = _state.copyWith(driverId: id, driverName: name);
+  void setDriver({
+    required String id,
+    required String name,
+    DriverStatus status = DriverStatus.active,
+  }) {
+    _state = _state.copyWith(
+      driverId: id,
+      driverName: name,
+      driverStatus: status,
+    );
     _applyFilter();
   }
 
@@ -236,8 +263,8 @@ class FleetDispatchController {
       id: s.vehicleId!,
       name: s.vehicleName ?? s.vehicleId!,
       plateNumber: s.plateNumber ?? '',
-      currentOdometer: 0,
-      status: VehicleStatus.active,
+      currentOdometer: s.vehicleOdometer ?? 0,
+      status: s.vehicleStatus ?? VehicleStatus.active,
     );
 
     final mockDriver = Driver(
@@ -245,7 +272,7 @@ class FleetDispatchController {
       fullName: s.driverName ?? s.driverId!,
       phone: '',
       licenseNumber: '',
-      status: DriverStatus.active,
+      status: s.driverStatus ?? DriverStatus.active,
     );
 
     // May throw ArgumentError for blank address/cargo (let it propagate)
@@ -294,6 +321,7 @@ class FleetDispatchController {
   UpdateDispatchStatusResult advanceStatus({
     required String dispatchId,
     required DispatchStatus newStatus,
+    Vehicle? vehicle,
     int? completionOdometer,
     String? notes,
   }) {
@@ -306,24 +334,22 @@ class FleetDispatchController {
       );
     }
 
-    // Build a vehicle placeholder with current odometer=0 only when needed for
-    // odometer update; otherwise let the service handle null vehicle.
-    Vehicle? vehicle;
-    if (newStatus == DispatchStatus.delivered && completionOdometer != null) {
-      vehicle = Vehicle(
-        id: dispatch.vehicleId,
-        name: dispatch.vehicleName,
-        plateNumber: dispatch.plateNumber,
-        currentOdometer: 0,
-        status: VehicleStatus.active,
-      );
-    }
+    final targetVehicle = vehicle ??
+        (newStatus == DispatchStatus.delivered && completionOdometer != null
+            ? Vehicle(
+                id: dispatch.vehicleId,
+                name: dispatch.vehicleName,
+                plateNumber: dispatch.plateNumber,
+                currentOdometer: 0,
+                status: VehicleStatus.active,
+              )
+            : null);
 
     final result = DispatchService.updateDispatchStatus(
       dispatch: dispatch,
       newStatus: newStatus,
       notes: notes,
-      vehicle: vehicle,
+      vehicle: targetVehicle,
       completionOdometer: completionOdometer,
     );
 
@@ -359,7 +385,13 @@ class FleetDispatchController {
     final filtered = filter == null
         ? _state.dispatches
         : List<Dispatch>.unmodifiable(
-            _state.dispatches.where((d) => d.status == filter),
+            _state.dispatches.where((d) {
+              if (filter == DispatchStatus.cancelled) {
+                return d.status == DispatchStatus.cancelled ||
+                    d.status == DispatchStatus.returned;
+              }
+              return d.status == filter;
+            }),
           );
     _state = _state.copyWith(filteredDispatches: filtered);
   }

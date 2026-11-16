@@ -1,4 +1,6 @@
 import 'package:test/test.dart';
+import 'package:sales_logistics_system/features/fleet/domain/models/driver.dart';
+import 'package:sales_logistics_system/features/fleet/domain/models/vehicle.dart';
 import 'package:sales_logistics_system/features/logistics/domain/models/dispatch.dart';
 import 'package:sales_logistics_system/features/logistics/presentation/controllers/fleet_dispatch_controller.dart';
 
@@ -14,6 +16,26 @@ void main() {
     ctrl.setDriver(id: 'drv-01', name: 'Yousef Mansour');
     ctrl.setDeliveryAddress('Beit Hanina, Jerusalem');
     ctrl.setCargoDescription('150 m² Marble + 4 Toilets');
+  }
+
+  Dispatch makeDispatch(String number, DispatchStatus status) {
+    return Dispatch(
+      id: number,
+      dispatchNumber: number,
+      date: DateTime(2026, 11, 14),
+      customerId: 'c1',
+      customerName: 'Customer',
+      customerPhone: '050',
+      deliveryAddress: 'Address',
+      cargoDescription: 'Cargo',
+      vehicleId: 'v1',
+      vehicleName: 'Truck',
+      plateNumber: '11-111-11',
+      driverId: 'd1',
+      driverName: 'Driver',
+      status: status,
+      updatedAt: DateTime(2026, 11, 14),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -576,6 +598,123 @@ void main() {
       expect(ctrl.state.vehicleId, isNull);
       expect(ctrl.state.driverId, isNull);
       expect(ctrl.state.formNotes, isNull);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 14. Domain Invariant Enforcement in Controller
+  // ---------------------------------------------------------------------------
+
+  group('Domain Invariant Enforcement in Controller', () {
+    test('submitNewDispatch throws ArgumentError when vehicle is in maintenance status', () {
+      final ctrl = FleetDispatchController();
+      fillForm(ctrl);
+      ctrl.setVehicle(
+        id: 'veh-01',
+        name: 'Mercedes Actros',
+        plateNumber: '72-491-88',
+        status: VehicleStatus.maintenance,
+      );
+
+      expect(() => ctrl.submitNewDispatch(), throwsArgumentError);
+    });
+
+    test('submitNewDispatch throws ArgumentError when vehicle is inactive', () {
+      final ctrl = FleetDispatchController();
+      fillForm(ctrl);
+      ctrl.setVehicle(
+        id: 'veh-01',
+        name: 'Mercedes Actros',
+        plateNumber: '72-491-88',
+        status: VehicleStatus.inactive,
+      );
+
+      expect(() => ctrl.submitNewDispatch(), throwsArgumentError);
+    });
+
+    test('submitNewDispatch throws ArgumentError when driver is inactive', () {
+      final ctrl = FleetDispatchController();
+      fillForm(ctrl);
+      ctrl.setDriver(
+        id: 'drv-01',
+        name: 'Mahmoud Issa',
+        status: DriverStatus.inactive,
+      );
+
+      expect(() => ctrl.submitNewDispatch(), throwsArgumentError);
+    });
+
+    test('advanceStatus with vehicle enforces odometer monotonicity and preserves metadata', () {
+      final ctrl = FleetDispatchController();
+      fillForm(ctrl);
+      final d = ctrl.submitNewDispatch(date: DateTime(2026, 11, 14));
+      ctrl.advanceStatus(dispatchId: d.id, newStatus: DispatchStatus.dispatched);
+
+      const truck = Vehicle(
+        id: 'veh-01',
+        name: 'Mercedes Actros 3340',
+        plateNumber: '72-491-88',
+        modelYear: 2021,
+        currentOdometer: 142500,
+        status: VehicleStatus.active,
+        notes: 'Heavy dump truck',
+      );
+
+      final result = ctrl.advanceStatus(
+        dispatchId: d.id,
+        newStatus: DispatchStatus.delivered,
+        vehicle: truck,
+        completionOdometer: 142620,
+      );
+
+      expect(result.dispatch.status, equals(DispatchStatus.delivered));
+      expect(result.updatedVehicle, isNotNull);
+      expect(result.updatedVehicle!.currentOdometer, equals(142620));
+      expect(result.updatedVehicle!.modelYear, equals(2021));
+      expect(result.updatedVehicle!.notes, equals('Heavy dump truck'));
+    });
+
+    test('advanceStatus with vehicle throws ArgumentError when completionOdometer is less than vehicle.currentOdometer', () {
+      final ctrl = FleetDispatchController();
+      fillForm(ctrl);
+      final d = ctrl.submitNewDispatch(date: DateTime(2026, 11, 14));
+      ctrl.advanceStatus(dispatchId: d.id, newStatus: DispatchStatus.dispatched);
+
+      const truck = Vehicle(
+        id: 'veh-01',
+        name: 'Mercedes Actros 3340',
+        plateNumber: '72-491-88',
+        currentOdometer: 142500,
+        status: VehicleStatus.active,
+      );
+
+      expect(
+        () => ctrl.advanceStatus(
+          dispatchId: d.id,
+          newStatus: DispatchStatus.delivered,
+          vehicle: truck,
+          completionOdometer: 140000,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('setStatusFilter DispatchStatus.cancelled includes both cancelled and returned dispatches', () {
+      final initial = [
+        makeDispatch('DSP-2026-00001', DispatchStatus.pending),
+        makeDispatch('DSP-2026-00002', DispatchStatus.cancelled),
+        makeDispatch('DSP-2026-00003', DispatchStatus.returned),
+        makeDispatch('DSP-2026-00004', DispatchStatus.delivered),
+      ];
+
+      final ctrl = FleetDispatchController(initial: initial);
+      ctrl.setStatusFilter(DispatchStatus.cancelled);
+
+      expect(ctrl.state.filteredDispatches.length, equals(2));
+      expect(
+        ctrl.state.filteredDispatches.map((d) => d.status),
+        containsAll([DispatchStatus.cancelled, DispatchStatus.returned]),
+      );
     });
   });
 }

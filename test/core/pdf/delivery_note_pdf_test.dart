@@ -159,5 +159,47 @@ void main() {
             reason: 'PDF bytes should exceed 100 for status: ${status.name}');
       }
     });
+
+    test('generates PDF with dispatch notes and company subtitles', () async {
+      final dispatchWithNotes = Dispatch(
+        id: 'dsp-notes',
+        dispatchNumber: 'DSP-2026-NOTES',
+        date: DateTime(2026, 11, 14),
+        invoiceNumber: 'INV-2026-00412',
+        customerId: 'cust-001',
+        customerName: 'Ahmad Al-Khalidi',
+        customerPhone: '052-123-4567',
+        deliveryAddress: 'Ramallah, Al-Masyoun',
+        cargoDescription: '150 m2 Marble slabs',
+        vehicleId: 'veh-001',
+        vehicleName: 'Mercedes Actros',
+        plateNumber: '72-491-88',
+        driverId: 'drv-001',
+        driverName: 'Mahmoud Issa',
+        status: DispatchStatus.dispatched,
+        notes: 'Gate code #4412, call driver on arrival',
+        updatedAt: DateTime(2026, 11, 14),
+      );
+
+      final companyWithSubtitles = CompanyInfo(
+        name: 'M.I.R.N POWER',
+        nameHebrew: 'מ.י.ר.ן. פאוור בע"מ',
+        nameArabic: 'شركة م.ي.ر.ن باور م.ض',
+        subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
+        subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
+        taxId: '515123456',
+        phone: '02-123-4567',
+        address: 'ירושלים / القدס',
+      );
+
+      final Uint8List bytes = await DeliveryNotePdfGenerator.generate(
+        dispatch: dispatchWithNotes,
+        company: companyWithSubtitles,
+        deliveryFee: 450.0,
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(bytes.length, greaterThan(100));
+    });
   });
 }
