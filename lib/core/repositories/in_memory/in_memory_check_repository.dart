@@ -4,7 +4,7 @@ import '../check_repository.dart';
 
 class InMemoryCheckRepository implements CheckRepository {
   final Map<String, CheckRecord> _checks = {};
-  late final StreamController<List<CheckRecord>> _controller;
+  final StreamController<List<CheckRecord>> _controller = StreamController<List<CheckRecord>>.broadcast();
 
   InMemoryCheckRepository({List<CheckRecord>? initialChecks}) {
     if (initialChecks != null) {
@@ -12,15 +12,35 @@ class InMemoryCheckRepository implements CheckRepository {
         _checks[c.id] = c;
       }
     }
-    _controller = StreamController<List<CheckRecord>>.broadcast(
-      onListen: () => _controller.add(_currentList),
-    );
   }
 
   List<CheckRecord> get _currentList => List.unmodifiable(_checks.values);
 
+  void _notify() {
+    if (!_controller.isClosed) {
+      _controller.add(_currentList);
+    }
+  }
+
   @override
-  Stream<List<CheckRecord>> watchChecks() => _controller.stream;
+  Stream<List<CheckRecord>> watchChecks() {
+    late StreamController<List<CheckRecord>> subCtrl;
+    StreamSubscription<List<CheckRecord>>? subscription;
+    subCtrl = StreamController<List<CheckRecord>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentList);
+        subscription = _controller.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<CheckRecord>> getChecks() async => _currentList;
@@ -31,7 +51,7 @@ class InMemoryCheckRepository implements CheckRepository {
   @override
   Future<void> saveCheck(CheckRecord check) async {
     _checks[check.id] = check;
-    _controller.add(_currentList);
+    _notify();
   }
 
   @override
@@ -55,7 +75,7 @@ class InMemoryCheckRepository implements CheckRepository {
       history: [...existing.history, historyEntry],
     );
     _checks[id] = updated;
-    _controller.add(_currentList);
+    _notify();
   }
 
   void dispose() {

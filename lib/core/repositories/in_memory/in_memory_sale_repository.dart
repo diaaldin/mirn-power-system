@@ -6,8 +6,8 @@ import '../sale_repository.dart';
 class InMemorySaleRepository implements SaleRepository {
   final Map<String, SaleInvoice> _sales = {};
   final Map<String, CreditNote> _creditNotes = {};
-  late final StreamController<List<SaleInvoice>> _salesController;
-  late final StreamController<List<CreditNote>> _creditNotesController;
+  final StreamController<List<SaleInvoice>> _salesController = StreamController<List<SaleInvoice>>.broadcast();
+  final StreamController<List<CreditNote>> _creditNotesController = StreamController<List<CreditNote>>.broadcast();
 
   InMemorySaleRepository({
     List<SaleInvoice>? initialSales,
@@ -23,19 +23,42 @@ class InMemorySaleRepository implements SaleRepository {
         _creditNotes[c.id] = c;
       }
     }
-    _salesController = StreamController<List<SaleInvoice>>.broadcast(
-      onListen: () => _salesController.add(_currentSalesList),
-    );
-    _creditNotesController = StreamController<List<CreditNote>>.broadcast(
-      onListen: () => _creditNotesController.add(_currentCreditNotesList),
-    );
   }
 
   List<SaleInvoice> get _currentSalesList => List.unmodifiable(_sales.values);
   List<CreditNote> get _currentCreditNotesList => List.unmodifiable(_creditNotes.values);
 
+  void _notifySales() {
+    if (!_salesController.isClosed) {
+      _salesController.add(_currentSalesList);
+    }
+  }
+
+  void _notifyCreditNotes() {
+    if (!_creditNotesController.isClosed) {
+      _creditNotesController.add(_currentCreditNotesList);
+    }
+  }
+
   @override
-  Stream<List<SaleInvoice>> watchSales() => _salesController.stream;
+  Stream<List<SaleInvoice>> watchSales() {
+    late StreamController<List<SaleInvoice>> subCtrl;
+    StreamSubscription<List<SaleInvoice>>? subscription;
+    subCtrl = StreamController<List<SaleInvoice>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentSalesList);
+        subscription = _salesController.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<SaleInvoice>> getSales() async => _currentSalesList;
@@ -46,11 +69,28 @@ class InMemorySaleRepository implements SaleRepository {
   @override
   Future<void> saveSale(SaleInvoice sale) async {
     _sales[sale.id] = sale;
-    _salesController.add(_currentSalesList);
+    _notifySales();
   }
 
   @override
-  Stream<List<CreditNote>> watchCreditNotes() => _creditNotesController.stream;
+  Stream<List<CreditNote>> watchCreditNotes() {
+    late StreamController<List<CreditNote>> subCtrl;
+    StreamSubscription<List<CreditNote>>? subscription;
+    subCtrl = StreamController<List<CreditNote>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentCreditNotesList);
+        subscription = _creditNotesController.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<CreditNote>> getCreditNotes() async => _currentCreditNotesList;
@@ -61,7 +101,7 @@ class InMemorySaleRepository implements SaleRepository {
   @override
   Future<void> saveCreditNote(CreditNote creditNote) async {
     _creditNotes[creditNote.id] = creditNote;
-    _creditNotesController.add(_currentCreditNotesList);
+    _notifyCreditNotes();
   }
 
   void dispose() {

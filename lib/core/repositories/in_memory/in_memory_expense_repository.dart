@@ -4,7 +4,7 @@ import '../expense_repository.dart';
 
 class InMemoryExpenseRepository implements ExpenseRepository {
   final Map<String, Expense> _expenses = {};
-  late final StreamController<List<Expense>> _controller;
+  final StreamController<List<Expense>> _controller = StreamController<List<Expense>>.broadcast();
 
   InMemoryExpenseRepository({List<Expense>? initialExpenses}) {
     if (initialExpenses != null) {
@@ -12,15 +12,35 @@ class InMemoryExpenseRepository implements ExpenseRepository {
         _expenses[e.id] = e;
       }
     }
-    _controller = StreamController<List<Expense>>.broadcast(
-      onListen: () => _controller.add(_currentList),
-    );
   }
 
   List<Expense> get _currentList => List.unmodifiable(_expenses.values);
 
+  void _notify() {
+    if (!_controller.isClosed) {
+      _controller.add(_currentList);
+    }
+  }
+
   @override
-  Stream<List<Expense>> watchExpenses() => _controller.stream;
+  Stream<List<Expense>> watchExpenses() {
+    late StreamController<List<Expense>> subCtrl;
+    StreamSubscription<List<Expense>>? subscription;
+    subCtrl = StreamController<List<Expense>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentList);
+        subscription = _controller.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<Expense>> getExpenses() async => _currentList;
@@ -31,7 +51,7 @@ class InMemoryExpenseRepository implements ExpenseRepository {
   @override
   Future<void> saveExpense(Expense expense) async {
     _expenses[expense.id] = expense;
-    _controller.add(_currentList);
+    _notify();
   }
 
   void dispose() {

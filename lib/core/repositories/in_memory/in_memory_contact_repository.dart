@@ -6,7 +6,7 @@ import '../contact_repository.dart';
 class InMemoryContactRepository implements ContactRepository {
   final Map<String, Contact> _contacts = {};
   final Map<String, List<StatementEntry>> _statements = {};
-  late final StreamController<List<Contact>> _contactsController;
+  final StreamController<List<Contact>> _contactsController = StreamController<List<Contact>>.broadcast();
   final Map<String, StreamController<List<StatementEntry>>> _statementControllers = {};
 
   InMemoryContactRepository({List<Contact>? initialContacts}) {
@@ -15,21 +15,40 @@ class InMemoryContactRepository implements ContactRepository {
         _contacts[c.id] = c;
       }
     }
-    _contactsController = StreamController<List<Contact>>.broadcast(
-      onListen: () => _contactsController.add(_currentList),
-    );
   }
 
   List<Contact> get _currentList => List.unmodifiable(_contacts.values);
 
+  void _notifyContacts() {
+    if (!_contactsController.isClosed) {
+      _contactsController.add(_currentList);
+    }
+  }
+
   @override
   Stream<List<Contact>> watchContacts({ContactType? type}) {
-    if (type == null) {
-      return _contactsController.stream;
-    }
-    return _contactsController.stream.map(
-      (list) => list.where((c) => c.type == type).toList(),
+    late StreamController<List<Contact>> subCtrl;
+    StreamSubscription<List<Contact>>? subscription;
+    subCtrl = StreamController<List<Contact>>.broadcast(
+      onListen: () {
+        final initial = type == null ? _currentList : _currentList.where((c) => c.type == type).toList();
+        subCtrl.add(initial);
+        subscription = _contactsController.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) {
+              final filtered = type == null ? data : data.where((c) => c.type == type).toList();
+              subCtrl.add(filtered);
+            }
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () {
+        subscription?.cancel();
+      },
     );
+    return subCtrl.stream;
   }
 
   @override
@@ -44,7 +63,7 @@ class InMemoryContactRepository implements ContactRepository {
   @override
   Future<void> saveContact(Contact contact) async {
     _contacts[contact.id] = contact;
-    _contactsController.add(_currentList);
+    _notifyContacts();
   }
 
   @override
@@ -57,19 +76,37 @@ class InMemoryContactRepository implements ContactRepository {
       currentBalance: existing.currentBalance + balanceDelta,
     );
     _contacts[contactId] = updated;
-    _contactsController.add(_currentList);
+    _notifyContacts();
   }
 
   @override
   Stream<List<StatementEntry>> watchStatementEntries(String contactId) {
+    late StreamController<List<StatementEntry>> subCtrl;
+    StreamSubscription<List<StatementEntry>>? subscription;
+
     var ctrl = _statementControllers[contactId];
     if (ctrl == null) {
-      ctrl = StreamController<List<StatementEntry>>.broadcast(
-        onListen: () => ctrl!.add(List.unmodifiable(_statements[contactId] ?? [])),
-      );
+      ctrl = StreamController<List<StatementEntry>>.broadcast();
       _statementControllers[contactId] = ctrl;
     }
-    return ctrl.stream;
+
+    subCtrl = StreamController<List<StatementEntry>>.broadcast(
+      onListen: () {
+        final currentEntries = List<StatementEntry>.unmodifiable(_statements[contactId] ?? []);
+        subCtrl.add(currentEntries);
+        subscription = ctrl!.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () {
+        subscription?.cancel();
+      },
+    );
+    return subCtrl.stream;
   }
 
   @override
@@ -81,7 +118,11 @@ class InMemoryContactRepository implements ContactRepository {
   Future<void> addStatementEntry(StatementEntry entry) async {
     final list = _statements.putIfAbsent(entry.contactId, () => []);
     list.add(entry);
-    _statementControllers[entry.contactId]?.add(List.unmodifiable(list));
+    final snapshot = List<StatementEntry>.unmodifiable(list);
+    final ctrl = _statementControllers[entry.contactId];
+    if (ctrl != null && !ctrl.isClosed) {
+      ctrl.add(snapshot);
+    }
   }
 
   void dispose() {

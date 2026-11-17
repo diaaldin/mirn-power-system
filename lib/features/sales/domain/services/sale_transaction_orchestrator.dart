@@ -22,26 +22,33 @@ class SaleTransactionOrchestrator {
   });
 
   /// Executes an atomic sale transaction across products, contacts, checks, and invoices.
-  /// Validates stock availability for all items before applying mutations.
+  /// Validates aggregated stock availability for all items before applying mutations.
   Future<void> processSaleTransaction({
     required SaleInvoice sale,
     Contact? customer,
     List<CheckRecord>? checks,
   }) async {
-    // 1. Validate stock sufficiency for all items
+    // 1. Aggregate required quantities per product to handle duplicate line items
+    final aggregatedQuantities = <String, double>{};
     for (final item in sale.items) {
-      final product = await productRepository.getProductById(item.productId);
+      aggregatedQuantities[item.productId] =
+          (aggregatedQuantities[item.productId] ?? 0.0) + item.quantity;
+    }
+
+    // 2. Validate stock sufficiency for all aggregated items
+    for (final entry in aggregatedQuantities.entries) {
+      final product = await productRepository.getProductById(entry.key);
       if (product == null) {
-        throw StateError('Product ${item.productId} (${item.productName}) not found');
+        throw StateError('Product with id ${entry.key} not found');
       }
-      if (product.currentStock < item.quantity) {
+      if (product.currentStock < entry.value) {
         throw StateError(
-          'Insufficient stock for ${item.productName}: available ${product.currentStock}, requested ${item.quantity}',
+          'Insufficient stock for ${product.name}: available ${product.currentStock}, requested ${entry.value}',
         );
       }
     }
 
-    // 2. Decrement inventory
+    // 3. Decrement inventory
     for (final item in sale.items) {
       await productRepository.updateStock(
         productId: item.productId,
@@ -49,13 +56,23 @@ class SaleTransactionOrchestrator {
       );
     }
 
-    // 3. Compute debt amount from payments
+    // 4. Compute debt amount from payments
     final debtAmount = sale.payments
         .where((p) => p.method == PaymentMethod.debt)
         .fold<double>(0.0, (sum, p) => sum + p.amount);
 
-    if (debtAmount > 0 && customer != null) {
-      final newBalance = customer.currentBalance + debtAmount;
+    if (debtAmount > 0) {
+      if (customer == null) {
+        throw StateError('Customer must be provided when sale contains on-account debt');
+      }
+
+      // Fetch fresh customer to avoid running balance de-synchronization
+      final freshCustomer = await contactRepository.getContactById(customer.id);
+      if (freshCustomer == null) {
+        throw StateError('Customer ${customer.id} not found in repository');
+      }
+
+      final newBalance = freshCustomer.currentBalance + debtAmount;
 
       await contactRepository.updateBalance(
         contactId: customer.id,
@@ -77,14 +94,14 @@ class SaleTransactionOrchestrator {
       await contactRepository.addStatementEntry(statement);
     }
 
-    // 4. Ingest checks if provided
+    // 5. Ingest checks if provided
     if (checks != null) {
       for (final check in checks) {
         await checkRepository.saveCheck(check);
       }
     }
 
-    // 5. Persist the sale invoice
+    // 6. Persist the sale invoice
     await saleRepository.saveSale(sale);
   }
 }

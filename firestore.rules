@@ -72,7 +72,10 @@ service cloud.firestore {
         request.resource.data.bankName is string &&
         request.resource.data.status == 'pending';
       allow update: if isAuthenticated() &&
-        request.resource.data.status in ['pending', 'deposited', 'cleared', 'bounced', 'returned', 'endorsed'];
+        request.resource.data.status in ['pending', 'deposited', 'cleared', 'bounced', 'returned', 'endorsed'] &&
+        request.resource.data.amount == resource.data.amount &&
+        request.resource.data.checkNumber == resource.data.checkNumber &&
+        request.resource.data.partyId == resource.data.partyId;
       allow delete: if false;
     }
 
@@ -103,6 +106,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.expenseNumber is string &&
         isPositive(request.resource.data.amount) &&
+        request.resource.data.description is string &&
         request.resource.data.description.size() > 0;
       allow update, delete: if false;
     }
@@ -121,9 +125,13 @@ service cloud.firestore {
     // 10. Document Sequence Counters: Atomic Sequential Numbering
     match /counters/{counterId} {
       allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.currentSeq is int &&
+        request.resource.data.currentSeq >= 0;
       allow update: if isAuthenticated() &&
         request.resource.data.currentSeq is int &&
         request.resource.data.currentSeq > resource.data.currentSeq; // Monotonic only
+      allow delete: if false;
     }
 
     // 11. User Profiles & Roles

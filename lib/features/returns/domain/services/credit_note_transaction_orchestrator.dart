@@ -16,7 +16,7 @@ class CreditNoteTransactionOrchestrator {
     required this.saleRepository,
   });
 
-  /// Restores stock for returned items, decreases customer balance, and writes a credit statement entry.
+  /// Restores stock for returned items, and decreases customer debt only if refundMethod is debtCredit.
   Future<void> processCreditNoteTransaction({
     required CreditNote creditNote,
     required Contact customer,
@@ -29,29 +29,36 @@ class CreditNoteTransactionOrchestrator {
       );
     }
 
-    // 2. Reduce customer debt
-    final returnTotal = creditNote.totalAmount;
-    final newBalance = customer.currentBalance - returnTotal;
+    // 2. Reduce customer debt ONLY if refund method is on-account credit (prevents double refund)
+    if (creditNote.refundMethod == RefundMethod.debtCredit) {
+      final freshCustomer = await contactRepository.getContactById(customer.id);
+      if (freshCustomer == null) {
+        throw StateError('Customer ${customer.id} not found in repository');
+      }
 
-    await contactRepository.updateBalance(
-      contactId: customer.id,
-      balanceDelta: -returnTotal,
-    );
+      final returnTotal = creditNote.totalAmount;
+      final newBalance = freshCustomer.currentBalance - returnTotal;
 
-    // 3. Post a credit entry on the customer statement of account
-    final statement = StatementEntry(
-      id: 'stmt-crn-${creditNote.id}',
-      contactId: customer.id,
-      contactType: ContactType.customer,
-      date: creditNote.date,
-      type: StatementEntryType.creditNote,
-      referenceNumber: creditNote.creditNoteNumber,
-      debit: 0.0,
-      credit: returnTotal,
-      runningBalance: newBalance,
-      description: 'فاتورة إرجاع ضريبية / חשבונית זיכוי ${creditNote.creditNoteNumber}',
-    );
-    await contactRepository.addStatementEntry(statement);
+      await contactRepository.updateBalance(
+        contactId: customer.id,
+        balanceDelta: -returnTotal,
+      );
+
+      // 3. Post a credit entry on the customer statement of account
+      final statement = StatementEntry(
+        id: 'stmt-crn-${creditNote.id}',
+        contactId: customer.id,
+        contactType: ContactType.customer,
+        date: creditNote.date,
+        type: StatementEntryType.creditNote,
+        referenceNumber: creditNote.creditNoteNumber,
+        debit: 0.0,
+        credit: returnTotal,
+        runningBalance: newBalance,
+        description: 'فاتورة إرجاع ضريبية / חשבונית זיכוי ${creditNote.creditNoteNumber}',
+      );
+      await contactRepository.addStatementEntry(statement);
+    }
 
     // 4. Save credit note
     await saleRepository.saveCreditNote(creditNote);

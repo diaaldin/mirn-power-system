@@ -4,7 +4,7 @@ import '../dispatch_repository.dart';
 
 class InMemoryDispatchRepository implements DispatchRepository {
   final Map<String, Dispatch> _dispatches = {};
-  late final StreamController<List<Dispatch>> _controller;
+  final StreamController<List<Dispatch>> _controller = StreamController<List<Dispatch>>.broadcast();
 
   InMemoryDispatchRepository({List<Dispatch>? initialDispatches}) {
     if (initialDispatches != null) {
@@ -12,15 +12,35 @@ class InMemoryDispatchRepository implements DispatchRepository {
         _dispatches[d.id] = d;
       }
     }
-    _controller = StreamController<List<Dispatch>>.broadcast(
-      onListen: () => _controller.add(_currentList),
-    );
   }
 
   List<Dispatch> get _currentList => List.unmodifiable(_dispatches.values);
 
+  void _notify() {
+    if (!_controller.isClosed) {
+      _controller.add(_currentList);
+    }
+  }
+
   @override
-  Stream<List<Dispatch>> watchDispatches() => _controller.stream;
+  Stream<List<Dispatch>> watchDispatches() {
+    late StreamController<List<Dispatch>> subCtrl;
+    StreamSubscription<List<Dispatch>>? subscription;
+    subCtrl = StreamController<List<Dispatch>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentList);
+        subscription = _controller.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<Dispatch>> getDispatches() async => _currentList;
@@ -31,7 +51,7 @@ class InMemoryDispatchRepository implements DispatchRepository {
   @override
   Future<void> saveDispatch(Dispatch dispatch) async {
     _dispatches[dispatch.id] = dispatch;
-    _controller.add(_currentList);
+    _notify();
   }
 
   @override
@@ -50,7 +70,7 @@ class InMemoryDispatchRepository implements DispatchRepository {
       updatedAt: DateTime.now(),
     );
     _dispatches[id] = updated;
-    _controller.add(_currentList);
+    _notify();
   }
 
   void dispose() {

@@ -21,38 +21,53 @@ class PurchaseTransactionOrchestrator {
     required PurchaseInvoice purchase,
     required Contact supplier,
   }) async {
-    // 1. Update product stock and recalculate weighted moving average cost
+    // 1. Precondition check: verify all products exist before executing mutations
     for (final item in purchase.items) {
       final product = await productRepository.getProductById(item.productId);
-      if (product != null) {
-        final currentStock = product.currentStock;
-        final intakeQty = item.convertedStockQuantity;
-        final newStock = currentStock + intakeQty;
-
-        double newAvgCost = product.purchaseCost;
-        if (newStock > 0) {
-          final totalCost = (currentStock * product.purchaseCost) + (intakeQty * item.unitCost);
-          newAvgCost = totalCost / newStock;
-        }
-
-        final updatedProduct = product.copyWith(
-          currentStock: newStock,
-          purchaseCost: ((newAvgCost * 100).round()) / 100.0,
-        );
-        await productRepository.saveProduct(updatedProduct);
+      if (product == null) {
+        throw StateError('Product ${item.productId} (${item.productName}) not found');
       }
     }
 
-    // 2. Increase supplier accounts payable balance
+    // 2. Update product stock and recalculate weighted moving average cost
+    for (final item in purchase.items) {
+      final product = (await productRepository.getProductById(item.productId))!;
+      final currentStock = product.currentStock;
+      final intakeQty = item.convertedStockQuantity;
+      final newStock = currentStock + intakeQty;
+
+      double newAvgCost;
+      if (currentStock <= 0) {
+        newAvgCost = item.unitCost;
+      } else if (newStock > 0) {
+        final totalCost = (currentStock * product.purchaseCost) + (intakeQty * item.unitCost);
+        newAvgCost = totalCost / newStock;
+      } else {
+        newAvgCost = item.unitCost;
+      }
+
+      final updatedProduct = product.copyWith(
+        currentStock: newStock,
+        purchaseCost: ((newAvgCost * 100).round()) / 100.0,
+      );
+      await productRepository.saveProduct(updatedProduct);
+    }
+
+    // 3. Fetch fresh supplier to avoid running balance de-synchronization
+    final freshSupplier = await contactRepository.getContactById(supplier.id);
+    if (freshSupplier == null) {
+      throw StateError('Supplier ${supplier.id} not found in repository');
+    }
+
     final billTotal = purchase.totalAmount;
-    final newBalance = supplier.currentBalance + billTotal;
+    final newBalance = freshSupplier.currentBalance + billTotal;
 
     await contactRepository.updateBalance(
       contactId: supplier.id,
       balanceDelta: billTotal,
     );
 
-    // 3. Post a credit entry on the supplier ledger
+    // 4. Post a credit entry on the supplier ledger
     final statement = StatementEntry(
       id: 'stmt-pur-${purchase.id}',
       contactId: supplier.id,
@@ -67,7 +82,7 @@ class PurchaseTransactionOrchestrator {
     );
     await contactRepository.addStatementEntry(statement);
 
-    // 4. Save purchase invoice
+    // 5. Save purchase invoice
     await purchaseRepository.savePurchase(purchase);
   }
 }

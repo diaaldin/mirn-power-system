@@ -24,23 +24,36 @@ class CheckLifecycleOrchestrator {
       throw ArgumentError('Check with id $checkId not found');
     }
 
-    // 1. Advance check status to bounced
+    // 1. Guard against duplicate bouncing and party mismatch
+    if (check.status == CheckStatus.bounced) {
+      throw StateError('Check $checkId is already marked as bounced');
+    }
+    if (check.partyId != party.id) {
+      throw ArgumentError('Party ID mismatch: expected ${check.partyId}, got ${party.id}');
+    }
+
+    // 2. Advance check status to bounced
     await checkRepository.updateCheckStatus(
       checkId,
       CheckStatus.bounced,
       note: reason ?? 'Bounced check (ללא כיסוי)',
     );
 
-    // 2. Re-apply debt to the debtor's balance
+    // 3. Re-apply debt to the debtor's balance using fresh record
+    final freshParty = await contactRepository.getContactById(party.id);
+    if (freshParty == null) {
+      throw StateError('Party ${party.id} not found in repository');
+    }
+
     final bouncedAmount = check.amount;
-    final newBalance = party.currentBalance + bouncedAmount;
+    final newBalance = freshParty.currentBalance + bouncedAmount;
 
     await contactRepository.updateBalance(
       contactId: party.id,
       balanceDelta: bouncedAmount,
     );
 
-    // 3. Post a debit entry on the statement of account ledger
+    // 4. Post a debit entry on the statement of account ledger
     final statement = StatementEntry(
       id: 'stmt-bounce-$checkId',
       contactId: party.id,

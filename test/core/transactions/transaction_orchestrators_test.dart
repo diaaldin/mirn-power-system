@@ -156,6 +156,58 @@ void main() {
       final product = await productRepo.getProductById('prod-01');
       expect(product!.currentStock, equals(50.0));
     });
+
+    test('aggregates quantities for duplicate products in sale and rejects if total exceeds stock', () async {
+      // prod-01 has 50.0 available. Two items requesting 30.0 each = 60.0 total
+      final duplicateItemsSale = SaleInvoice(
+        id: 'inv-dup-01',
+        invoiceNumber: 'INV-2026-00003',
+        date: DateTime(2026, 11, 17),
+        customerId: sampleCustomer.id,
+        customerName: sampleCustomer.name,
+        customerTaxId: sampleCustomer.taxId,
+        isTaxInclusiveInput: false,
+        items: const [
+          SaleLineItem(
+            productId: 'prod-01',
+            productName: 'Spanish Porcelain 60x120',
+            unitType: UnitType.meter,
+            quantity: 30.0,
+            unitPrice: 100.0,
+            subtotal: 3000.0,
+          ),
+          SaleLineItem(
+            productId: 'prod-01',
+            productName: 'Spanish Porcelain 60x120',
+            unitType: UnitType.meter,
+            quantity: 30.0,
+            unitPrice: 90.0,
+            subtotal: 2700.0,
+          ),
+        ],
+        subtotal: 5700.0,
+        vatRate: 0.17,
+        vatAmount: 969.0,
+        totalAmount: 6669.0,
+        payments: const [
+          PaymentSplit(method: PaymentMethod.cash, amount: 6669.0),
+        ],
+        createdAt: DateTime(2026, 11, 17),
+      );
+
+      expect(
+        () => orchestrator.processSaleTransaction(sale: duplicateItemsSale, customer: sampleCustomer),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('requested 60.0'),
+        )),
+      );
+
+      // Stock remains completely untouched at 50.0
+      final product = await productRepo.getProductById('prod-01');
+      expect(product!.currentStock, equals(50.0));
+    });
   });
 
   group('CheckLifecycleOrchestrator', () {
@@ -226,6 +278,55 @@ void main() {
       expect(statements.first.type, equals(StatementEntryType.checkBounced));
       expect(statements.first.debit, equals(4500.0));
       expect(statements.first.runningBalance, equals(4500.0));
+    });
+
+    test('rejects bounce if check is already marked as bounced', () async {
+      await orchestrator.processCheckBounce(
+        checkId: 'chk-99',
+        party: sampleCustomer,
+      );
+
+      // Attempt second bounce
+      expect(
+        () => orchestrator.processCheckBounce(
+          checkId: 'chk-99',
+          party: sampleCustomer,
+        ),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('already marked as bounced'),
+        )),
+      );
+
+      // Debt balance not doubled
+      final customer = await contactRepo.getContactById('cust-01');
+      expect(customer!.currentBalance, equals(4500.0));
+    });
+
+    test('rejects bounce if partyId does not match check partyId', () async {
+      final wrongCustomer = const Contact(
+        id: 'cust-wrong',
+        name: 'Wrong Customer',
+        phone: '050-0000000',
+        address: 'Unknown',
+        taxId: '515892104',
+        debtWarningLimit: 10000.0,
+        type: ContactType.customer,
+        currentBalance: 0.0,
+      );
+
+      expect(
+        () => orchestrator.processCheckBounce(
+          checkId: 'chk-99',
+          party: wrongCustomer,
+        ),
+        throwsA(isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          contains('Party ID mismatch'),
+        )),
+      );
     });
   });
 
@@ -322,6 +423,50 @@ void main() {
       expect(statements.first.credit, equals(3510.0));
       expect(statements.first.runningBalance, equals(13510.0));
     });
+
+    test('aborts and rejects purchase intake if any product is not found in repository', () async {
+      final invalidPurchase = PurchaseInvoice(
+        id: 'pur-invalid-01',
+        invoiceNumber: 'PUR-2026-00002',
+        supplierId: 'sup-01',
+        supplierName: 'Castellon Tiles Spain',
+        supplierTaxId: '515892104',
+        date: DateTime(2026, 11, 17),
+        items: [
+          PurchaseLineItem(
+            productId: 'non-existent-product',
+            productName: 'Unknown Product',
+            unitType: UnitType.meter,
+            quantity: 10.0,
+            unitCost: 50.0,
+            subtotal: 500.0,
+            convertedStockQuantity: 10.0,
+          ),
+        ],
+        subtotal: 500.0,
+        vatRate: 0.17,
+        vatAmount: 85.0,
+        totalAmount: 585.0,
+        onAccountAmount: 585.0,
+        createdBy: 'admin',
+      );
+
+      expect(
+        () => orchestrator.processPurchaseTransaction(
+          purchase: invalidPurchase,
+          supplier: sampleSupplier,
+        ),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('not found'),
+        )),
+      );
+
+      // Supplier AP remains untouched at 10000.0 (no phantom debt)
+      final supplier = await contactRepo.getContactById('sup-01');
+      expect(supplier!.currentBalance, equals(10000.0));
+    });
   });
 
   group('CreditNoteTransactionOrchestrator', () {
@@ -415,6 +560,52 @@ void main() {
       expect(statements, hasLength(1));
       expect(statements.first.credit, equals(585.0));
       expect(statements.first.runningBalance, equals(4415.0));
+    });
+
+    test('cash refund restores stock but does not deduct customer on-account debt', () async {
+      final cashCreditNote = CreditNote(
+        id: 'crn-cash-01',
+        creditNoteNumber: 'CRN-2026-00002',
+        originalInvoiceNumber: 'INV-2026-00001',
+        date: DateTime(2026, 11, 17),
+        customerId: sampleCustomer.id,
+        customerName: sampleCustomer.name,
+        customerTaxId: sampleCustomer.taxId,
+        items: const [
+          CreditNoteLineItem(
+            productId: 'prod-01',
+            productName: 'Spanish Porcelain 60x120',
+            unitType: UnitType.meter,
+            quantity: 4.0,
+            unitPrice: 100.0,
+            subtotal: 400.0,
+          ),
+        ],
+        subtotal: 400.0,
+        vatRate: 0.17,
+        vatAmount: 68.0,
+        totalAmount: 468.0,
+        refundMethod: RefundMethod.cashRefund, // Cash paid out directly
+        reason: 'Surplus tiles returned for cash',
+        createdAt: DateTime(2026, 11, 17),
+      );
+
+      await orchestrator.processCreditNoteTransaction(
+        creditNote: cashCreditNote,
+        customer: sampleCustomer,
+      );
+
+      // Inventory restored: 20 + 4 = 24
+      final product = await productRepo.getProductById('prod-01');
+      expect(product!.currentStock, equals(24.0));
+
+      // Customer on-account debt remains unchanged (no double refund)
+      final customer = await contactRepo.getContactById('cust-01');
+      expect(customer!.currentBalance, equals(5000.0));
+
+      // No ledger entry created
+      final statements = await contactRepo.getStatementEntries('cust-01');
+      expect(statements, isEmpty);
     });
   });
 }

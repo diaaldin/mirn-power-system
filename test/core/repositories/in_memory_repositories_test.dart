@@ -44,6 +44,19 @@ void main() {
       await repo.updateStock(productId: 'p1', stockDelta: 50.0);
     });
 
+    test('secondary subscriber receives current items immediately without waiting for mutation', () async {
+      // First listener
+      final firstSub = repo.watchProducts().listen((_) {});
+
+      // Second listener subscribing later
+      expect(
+        repo.watchProducts(),
+        emits(hasLength(1)),
+      );
+
+      await firstSub.cancel();
+    });
+
     test('updateStock throws ArgumentError if product does not exist', () async {
       expect(
         () => repo.updateStock(productId: 'non-existent', stockDelta: 10.0),

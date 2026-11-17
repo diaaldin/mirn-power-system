@@ -4,7 +4,7 @@ import '../product_repository.dart';
 
 class InMemoryProductRepository implements ProductRepository {
   final Map<String, Product> _products = {};
-  late final StreamController<List<Product>> _controller;
+  final StreamController<List<Product>> _controller = StreamController<List<Product>>.broadcast();
 
   InMemoryProductRepository({List<Product>? initialProducts}) {
     if (initialProducts != null) {
@@ -12,15 +12,37 @@ class InMemoryProductRepository implements ProductRepository {
         _products[p.id] = p;
       }
     }
-    _controller = StreamController<List<Product>>.broadcast(
-      onListen: () => _controller.add(_currentList),
-    );
   }
 
   List<Product> get _currentList => List.unmodifiable(_products.values);
 
+  void _notify() {
+    if (!_controller.isClosed) {
+      _controller.add(_currentList);
+    }
+  }
+
   @override
-  Stream<List<Product>> watchProducts() => _controller.stream;
+  Stream<List<Product>> watchProducts() {
+    late StreamController<List<Product>> subCtrl;
+    StreamSubscription<List<Product>>? subscription;
+    subCtrl = StreamController<List<Product>>.broadcast(
+      onListen: () {
+        subCtrl.add(_currentList);
+        subscription = _controller.stream.listen(
+          (data) {
+            if (!subCtrl.isClosed) subCtrl.add(data);
+          },
+          onError: subCtrl.addError,
+          onDone: subCtrl.close,
+        );
+      },
+      onCancel: () {
+        subscription?.cancel();
+      },
+    );
+    return subCtrl.stream;
+  }
 
   @override
   Future<List<Product>> getProducts() async => _currentList;
@@ -31,7 +53,7 @@ class InMemoryProductRepository implements ProductRepository {
   @override
   Future<void> saveProduct(Product product) async {
     _products[product.id] = product;
-    _controller.add(_currentList);
+    _notify();
   }
 
   @override
@@ -44,7 +66,7 @@ class InMemoryProductRepository implements ProductRepository {
       currentStock: existing.currentStock + stockDelta,
     );
     _products[productId] = updated;
-    _controller.add(_currentList);
+    _notify();
   }
 
   void dispose() {
