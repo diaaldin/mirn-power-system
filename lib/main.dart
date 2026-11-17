@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/app_locale.dart';
 import 'core/pdf/delivery_note_pdf_generator.dart';
+import 'core/pdf/expense_pdf_generator.dart';
 import 'core/pdf/invoice_pdf_generator.dart';
 import 'core/pdf/purchase_pdf_generator.dart';
 import 'core/theme/mirn_theme.dart';
@@ -12,6 +13,9 @@ import 'features/accounts/presentation/screens/statement_screen.dart';
 import 'features/checks/domain/models/check_record.dart';
 import 'features/checks/presentation/screens/checks_screen.dart';
 import 'features/dashboard/presentation/widgets/navigation_shell.dart';
+import 'features/expenses/domain/models/expense.dart';
+import 'features/expenses/domain/services/expense_service.dart';
+import 'features/expenses/presentation/controllers/expenses_controller.dart';
 import 'features/fleet/domain/models/driver.dart';
 import 'features/fleet/domain/models/vehicle.dart';
 import 'features/inventory/domain/models/product.dart';
@@ -199,7 +203,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       name: 'مرسيدس أكتروس 3340 (شاحنة قلاب 30 طن) / מרצדס אקטרוס',
       plateNumber: '72-491-88',
       modelYear: 2021,
-      currentOdometer: 142500,
+      currentOdometer: 142800,
       status: VehicleStatus.active,
       notes: 'قلاب تفريغ خلفي - مخصصة للصخور والأتربة',
     ),
@@ -254,6 +258,8 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   late final ChecksScreenController _checksController;
   late final StatementScreenController _statementController;
   late final FleetDispatchController _fleetController;
+  late final ExpensesController _expensesController;
+  int _fleetSubTabIndex = 0;
   final SalesPosController _posController = SalesPosController();
 
   @override
@@ -440,6 +446,69 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     _fleetController = FleetDispatchController(
       initial: initialDispatches,
       initialSeq: 4,
+    );
+
+    _expensesController = ExpensesController(
+      initialExpenses: [
+        Expense(
+          id: 'EXP-2026-00001',
+          expenseNumber: 'EXP-2026-00001',
+          date: DateTime(2026, 11, 10),
+          category: ExpenseCategory.fuel,
+          amount: 850.0,
+          description: 'سولار شاحنة مرسيدس أكتروس - محطة النور',
+          vehicleId: 'veh-01',
+          driverId: 'drv-01',
+          odometerReading: 142500,
+          paymentMethod: ExpensePaymentMethod.bankTransfer,
+          reference: 'INV-FUEL-9921',
+          createdAt: DateTime(2026, 11, 10),
+        ),
+        Expense(
+          id: 'EXP-2026-00002',
+          expenseNumber: 'EXP-2026-00002',
+          date: DateTime(2026, 11, 12),
+          category: ExpenseCategory.maintenance,
+          amount: 2400.0,
+          description: 'صيانة دورية وتغيير فلاتر هيدروليك - كراج النصر',
+          vehicleId: 'veh-02',
+          driverId: 'drv-02',
+          odometerReading: 98200,
+          paymentMethod: ExpensePaymentMethod.check,
+          reference: 'CHK-8812',
+          createdAt: DateTime(2026, 11, 12),
+        ),
+        Expense(
+          id: 'EXP-2026-00003',
+          expenseNumber: 'EXP-2026-00003',
+          date: DateTime(2026, 11, 14),
+          category: ExpenseCategory.tires,
+          amount: 3600.0,
+          description: 'استبدال طقم كوشوك خلفي (4 إطارات ميشلان)',
+          vehicleId: 'veh-01',
+          driverId: 'drv-01',
+          odometerReading: 142800,
+          paymentMethod: ExpensePaymentMethod.cash,
+          reference: 'RCP-5510',
+          createdAt: DateTime(2026, 11, 14),
+        ),
+        Expense(
+          id: 'EXP-2026-00004',
+          expenseNumber: 'EXP-2026-00004',
+          date: DateTime(2026, 11, 15),
+          category: ExpenseCategory.driverAllowance,
+          amount: 450.0,
+          description: 'بدل سفر وإكرامية نقل حجر بيت لحم',
+          vehicleId: 'veh-02',
+          driverId: 'drv-02',
+          paymentMethod: ExpensePaymentMethod.cash,
+          reference: 'ALW-102',
+          createdAt: DateTime(2026, 11, 15),
+        ),
+      ],
+      vehicles: _vehicles,
+      drivers: _drivers,
+      nextExpenseSeq: 5,
     );
   }
 
@@ -1416,6 +1485,86 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   }
 
   Widget _buildFleetScreen() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Sub-Tab Switcher
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(AppColorValues.cardDark),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _fleetSubTabIndex = 0),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _fleetSubTabIndex == 0
+                          ? const Color(AppColorValues.primaryGold)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'أوامر النقل والإرساليات (משלוחים)'
+                          : 'משלוחים והובלה / أوامر النقل',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: _fleetSubTabIndex == 0 ? Colors.black : Colors.white70,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _fleetSubTabIndex = 1),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _fleetSubTabIndex == 1
+                          ? const Color(AppColorValues.primaryGold)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'مصاريف الأسطول وتكلفة الكيلومتر (הוצאות צי ועלות לק"מ)'
+                          : 'הוצאות צי ועלות לק"מ / مصاريف وتكلفة الكيلومتر',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: _fleetSubTabIndex == 1 ? Colors.black : Colors.white70,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (_fleetSubTabIndex == 0)
+          ..._buildFleetDispatchesTab()
+        else
+          ..._buildFleetExpensesTab(),
+      ],
+    );
+  }
+
+  List<Widget> _buildFleetDispatchesTab() {
     final state = _fleetController.state;
     final activeTrucksCount = _vehicles.where((v) => v.status == VehicleStatus.active).length;
     final totalFleetKm = _vehicles.fold<int>(0, (sum, v) => sum + v.currentOdometer);
@@ -1423,168 +1572,608 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
         .where((d) => d.status == DispatchStatus.pending || d.status == DispatchStatus.dispatched)
         .length;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return [
+      // 1. Header & Quick Action
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: _buildSectionHeader(
+              _currentLanguage == AppLanguage.arabic
+                  ? 'إدارة أسطول الشاحنات واللوجستيات / צי רכב והובלות'
+                  : 'צי רכב והובלות / أسطول الشاحنات واللوجستيات',
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(AppColorValues.primaryGold),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            icon: const Icon(Icons.add_road, size: 20),
+            label: Text(
+              _currentLanguage == AppLanguage.arabic
+                  ? 'أمر إرسالية ونقل جديد'
+                  : 'תעודת משלוח חדשה',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: _showNewDispatchDialog,
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // 2. Fleet KPI Banner
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'الشاحنات العاملة' : 'משאיות פעילות',
+            value: '$activeTrucksCount / ${_vehicles.length}',
+            icon: Icons.local_shipping,
+            color: const Color(AppColorValues.successGreen),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'إجمالي كيلومترات الأسطول' : 'סה"כ ק"מ צי',
+            value: '$totalFleetKm كم',
+            icon: Icons.speed,
+            color: const Color(AppColorValues.infoBlue),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'إرساليات قيد التنفيذ' : 'משלוחים בביצוע',
+            value: '$activeDispatchesCount',
+            icon: Icons.route,
+            color: const Color(AppColorValues.warningOrange),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'متوسط تكلفة التشغيل' : 'עלות ממוצעת לק"מ',
+            value: '₪ 4.85 / كم',
+            icon: Icons.analytics,
+            color: Colors.teal,
+          ),
+        ],
+      ),
+      const SizedBox(height: 24),
+
+      // 3. Status Filter Chips
+      Row(
+        children: [
+          Text(
+            _currentLanguage == AppLanguage.arabic ? 'تصفية الإرساليات:' : 'סינון משלוחים:',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildDispatchFilterChip(
+                    label: _currentLanguage == AppLanguage.arabic ? 'الكل' : 'הכל',
+                    isSelected: state.statusFilter == null,
+                    onSelected: () {
+                      setState(() => _fleetController.setStatusFilter(null));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildDispatchFilterChip(
+                    label: DispatchStatus.pending.arabicLabel,
+                    isSelected: state.statusFilter == DispatchStatus.pending,
+                    onSelected: () {
+                      setState(() => _fleetController.setStatusFilter(DispatchStatus.pending));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildDispatchFilterChip(
+                    label: DispatchStatus.dispatched.arabicLabel,
+                    isSelected: state.statusFilter == DispatchStatus.dispatched,
+                    onSelected: () {
+                      setState(() => _fleetController.setStatusFilter(DispatchStatus.dispatched));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildDispatchFilterChip(
+                    label: DispatchStatus.delivered.arabicLabel,
+                    isSelected: state.statusFilter == DispatchStatus.delivered,
+                    onSelected: () {
+                      setState(() => _fleetController.setStatusFilter(DispatchStatus.delivered));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildDispatchFilterChip(
+                    label: _currentLanguage == AppLanguage.arabic ? 'معاد / ملغي' : 'הוחזר / מבוטל',
+                    isSelected: state.statusFilter == DispatchStatus.cancelled ||
+                        state.statusFilter == DispatchStatus.returned,
+                    onSelected: () {
+                      setState(() => _fleetController.setStatusFilter(DispatchStatus.cancelled));
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // 4. Dispatches Board / List
+      if (state.filteredDispatches.isEmpty)
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.inbox, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    _currentLanguage == AppLanguage.arabic
+                        ? 'لا توجد إرساليات مطابقة للفلتر المحدد'
+                        : 'אין משלוחים התואמים לסינון הנבחר',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        )
+      else
+        ...state.filteredDispatches.map((dispatch) => _buildDispatchCard(dispatch)),
+
+      const SizedBox(height: 28),
+
+      // 5. Fleet Trucks Directory
+      _buildSectionHeader(
+        _currentLanguage == AppLanguage.arabic
+            ? 'دليل شاحنات ومركبات الأسطول / צי כלי רכב'
+            : 'צי כלי רכב / دليل شاحنات ومركبات الأسطول',
+      ),
+      const SizedBox(height: 12),
+      ..._vehicles.map((v) => _buildTruckCard(v)),
+    ];
+  }
+
+  List<Widget> _buildFleetExpensesTab() {
+    final summary = _expensesController.getFleetSummary();
+    final expenseState = _expensesController.state;
+
+    return [
+      // 1. Header with action button
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: _buildSectionHeader(
+              _currentLanguage == AppLanguage.arabic
+                  ? 'مصاريف الأسطول وتكلفة الكيلومتر / הוצאות צי ועלות לק"מ'
+                  : 'הוצאות צי ועלות לק"מ / مصاريف الأسطول وتكلفة الكيلومتر',
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(AppColorValues.primaryGold),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            icon: const Icon(Icons.receipt_long, size: 20),
+            label: Text(
+              _currentLanguage == AppLanguage.arabic
+                  ? 'تسجيل سند صرف ومصروف جديد'
+                  : 'שובר הוצאה חדש / سند صرف جديد',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: _showNewExpenseDialog,
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // 2. KPI Banner
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'إجمالي مصاريف الأسطول' : 'סה"כ הוצאות צי',
+            value: formatCurrency(summary.totalExpenses),
+            icon: Icons.account_balance_wallet,
+            color: const Color(AppColorValues.primaryGold),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'مصاريف الوقود والديزل' : 'הוצאות דלק וסולר',
+            value: formatCurrency(summary.totalFuel),
+            icon: Icons.local_gas_station,
+            color: const Color(AppColorValues.warningOrange),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'صيانة دورية وإطارات' : 'טיפולים וצמיגים',
+            value: formatCurrency(summary.totalMaintenance),
+            icon: Icons.build,
+            color: const Color(AppColorValues.infoBlue),
+          ),
+          _buildKpiCard(
+            title: _currentLanguage == AppLanguage.arabic ? 'متوسط تكلفة الكيلومتر' : 'עלות ממוצעת לק"מ',
+            value: '₪ ${summary.overallCostPerKm.toStringAsFixed(2)} / كم',
+            icon: Icons.speed,
+            color: Colors.teal,
+          ),
+        ],
+      ),
+      const SizedBox(height: 24),
+
+      // 3. Vehicle Operational Efficiency Cards (cost-per-km breakdown per vehicle)
+      _buildSectionHeader(
+        _currentLanguage == AppLanguage.arabic
+            ? 'كفاءة وتكلفة الشاحنات (Cost Per KM) / יעילות רכבים'
+            : 'יעילות כלי רכב ועלות לק"מ / كفاءة وتكلفة الشاحنات',
+      ),
+      const SizedBox(height: 12),
+      ..._vehicles.map((v) {
+        final m = _expensesController.getVehicleMetrics(v);
+        return _buildVehicleEfficiencyCard(v, m);
+      }),
+      const SizedBox(height: 24),
+
+      // 4. Category Filter Chips
+      Row(
+        children: [
+          Text(
+            _currentLanguage == AppLanguage.arabic ? 'تصنيف المصاريف:' : 'סינון קטגוריה:',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildDispatchFilterChip(
+                    label: _currentLanguage == AppLanguage.arabic ? 'الكل' : 'הכל',
+                    isSelected: expenseState.categoryFilter == null,
+                    onSelected: () {
+                      setState(() => _expensesController.setCategoryFilter(null));
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  ...ExpenseCategory.values.map((cat) {
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: _buildDispatchFilterChip(
+                        label: _currentLanguage == AppLanguage.arabic ? cat.arabicLabel : cat.hebrewLabel,
+                        isSelected: expenseState.categoryFilter == cat,
+                        onSelected: () {
+                          setState(() => _expensesController.setCategoryFilter(cat));
+                        },
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // 5. Expense Vouchers List
+      if (expenseState.filteredExpenses.isEmpty)
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.receipt_long, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    _currentLanguage == AppLanguage.arabic
+                        ? 'لا توجد سندات صرف مطابقة للتصفية المحددة'
+                        : 'אין שוברי הוצאה התואמים לסינון הנבחר',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        )
+      else
+        ...expenseState.filteredExpenses.map((expense) => _buildExpenseCard(expense)),
+    ];
+  }
+
+  Widget _buildVehicleEfficiencyCard(Vehicle vehicle, VehicleExpenseMetrics metrics) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: const Color(AppColorValues.primaryGold).withValues(alpha: 0.2),
+                        child: const Icon(Icons.local_shipping, color: Color(AppColorValues.primaryGold)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              vehicle.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'رقم اللوحة: ${vehicle.plateNumber} | سنة الصنع: ${vehicle.modelYear}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.teal),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text('تكلفة التشغيل/كم', style: TextStyle(fontSize: 10, color: Colors.tealAccent)),
+                      Text(
+                        '₪ ${metrics.costPerKm.toStringAsFixed(2)} / كم',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.tealAccent),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(AppColorValues.surfaceDark),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildMetricMiniCol('المسافة الإجمالية', '${vehicle.currentOdometer} كم', Icons.speed),
+                  _buildMetricMiniCol('إجمالي المصاريف', formatCurrency(metrics.totalExpenses), Icons.payments),
+                  _buildMetricMiniCol('وقود (₪/كم)', '₪ ${metrics.fuelCostPerKm.toStringAsFixed(2)}', Icons.local_gas_station),
+                  _buildMetricMiniCol('صيانة (₪/كم)', '₪ ${metrics.maintenanceCostPerKm.toStringAsFixed(2)}', Icons.build),
+                  _buildMetricMiniCol('السندات', '${metrics.expenseCount}', Icons.receipt),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricMiniCol(String title, String value, IconData icon) {
+    return Column(
       children: [
-        // 1. Header & Quick Action
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: _buildSectionHeader(
-                _currentLanguage == AppLanguage.arabic
-                    ? 'إدارة أسطول الشاحنات واللوجستيات / צי רכב והובלות'
-                    : 'צי רכב והובלות / أسطول الشاحنات واللوجستيات',
-              ),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(AppColorValues.primaryGold),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              icon: const Icon(Icons.add_road, size: 20),
-              label: Text(
-                _currentLanguage == AppLanguage.arabic
-                    ? 'أمر إرسالية ونقل جديد'
-                    : 'תעודת משלוח חדשה',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: _showNewDispatchDialog,
-            ),
+            Icon(icon, size: 12, color: Colors.grey),
+            const SizedBox(width: 4),
+            Text(title, style: const TextStyle(color: Colors.grey, fontSize: 11)),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      ],
+    );
+  }
 
-        // 2. Fleet KPI Banner
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _buildKpiCard(
-              title: _currentLanguage == AppLanguage.arabic ? 'الشاحنات العاملة' : 'משאיות פעילות',
-              value: '$activeTrucksCount / ${_vehicles.length}',
-              icon: Icons.local_shipping,
-              color: const Color(AppColorValues.successGreen),
-            ),
-            _buildKpiCard(
-              title: _currentLanguage == AppLanguage.arabic ? 'إجمالي كيلومترات الأسطول' : 'סה"כ ק"מ צי',
-              value: '$totalFleetKm كم',
-              icon: Icons.speed,
-              color: const Color(AppColorValues.infoBlue),
-            ),
-            _buildKpiCard(
-              title: _currentLanguage == AppLanguage.arabic ? 'إرساليات قيد التنفيذ' : 'משלוחים בביצוע',
-              value: '$activeDispatchesCount',
-              icon: Icons.route,
-              color: const Color(AppColorValues.warningOrange),
-            ),
-            _buildKpiCard(
-              title: _currentLanguage == AppLanguage.arabic ? 'متوسط تكلفة التشغيل' : 'עלות ממוצעת לק"מ',
-              value: '₪ 4.85 / كم',
-              icon: Icons.analytics,
-              color: Colors.teal,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
+  Widget _buildExpenseCard(Expense expense) {
+    Color catColor;
+    IconData catIcon;
+    switch (expense.category) {
+      case ExpenseCategory.fuel:
+        catColor = const Color(AppColorValues.warningOrange);
+        catIcon = Icons.local_gas_station;
+        break;
+      case ExpenseCategory.maintenance:
+        catColor = const Color(AppColorValues.infoBlue);
+        catIcon = Icons.build;
+        break;
+      case ExpenseCategory.tires:
+        catColor = Colors.deepOrange;
+        catIcon = Icons.album;
+        break;
+      case ExpenseCategory.driverAllowance:
+        catColor = const Color(AppColorValues.successGreen);
+        catIcon = Icons.badge;
+        break;
+      case ExpenseCategory.licensingInsurance:
+        catColor = Colors.purpleAccent;
+        catIcon = Icons.verified_user;
+        break;
+      case ExpenseCategory.rent:
+      case ExpenseCategory.utilities:
+        catColor = Colors.blueGrey;
+        catIcon = Icons.business;
+        break;
+      case ExpenseCategory.other:
+        catColor = Colors.grey;
+        catIcon = Icons.receipt;
+        break;
+    }
 
-        // 3. Status Filter Chips
-        Row(
+    final dateStr =
+        '${expense.date.year}-${expense.date.month.toString().padLeft(2, '0')}-${expense.date.day.toString().padLeft(2, '0')}';
+
+    final vehicle = expense.vehicleId != null
+        ? _vehicles.cast<Vehicle?>().firstWhere((v) => v?.id == expense.vehicleId, orElse: () => null)
+        : null;
+    final driver = expense.driverId != null
+        ? _drivers.cast<Driver?>().firstWhere((d) => d?.id == expense.driverId, orElse: () => null)
+        : null;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _currentLanguage == AppLanguage.arabic ? 'تصفية الإرساليات:' : 'סינון משלוחים:',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    _buildDispatchFilterChip(
-                      label: _currentLanguage == AppLanguage.arabic ? 'الكل' : 'הכל',
-                      isSelected: state.statusFilter == null,
-                      onSelected: () {
-                        setState(() => _fleetController.setStatusFilter(null));
-                      },
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(AppColorValues.primaryGold).withValues(alpha: 0.15),
+                        border: Border.all(color: const Color(AppColorValues.primaryGold)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        expense.expenseNumber,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(AppColorValues.primaryGold)),
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    _buildDispatchFilterChip(
-                      label: DispatchStatus.pending.arabicLabel,
-                      isSelected: state.statusFilter == DispatchStatus.pending,
-                      onSelected: () {
-                        setState(() => _fleetController.setStatusFilter(DispatchStatus.pending));
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    _buildDispatchFilterChip(
-                      label: DispatchStatus.dispatched.arabicLabel,
-                      isSelected: state.statusFilter == DispatchStatus.dispatched,
-                      onSelected: () {
-                        setState(() => _fleetController.setStatusFilter(DispatchStatus.dispatched));
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    _buildDispatchFilterChip(
-                      label: DispatchStatus.delivered.arabicLabel,
-                      isSelected: state.statusFilter == DispatchStatus.delivered,
-                      onSelected: () {
-                        setState(() => _fleetController.setStatusFilter(DispatchStatus.delivered));
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    _buildDispatchFilterChip(
-                      label: _currentLanguage == AppLanguage.arabic ? 'معاد / ملغي' : 'הוחזר / מבוטל',
-                      isSelected: state.statusFilter == DispatchStatus.cancelled ||
-                          state.statusFilter == DispatchStatus.returned,
-                      onSelected: () {
-                        setState(() => _fleetController.setStatusFilter(DispatchStatus.cancelled));
-                      },
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: catColor.withValues(alpha: 0.15),
+                        border: Border.all(color: catColor.withValues(alpha: 0.5)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(catIcon, size: 12, color: catColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            _currentLanguage == AppLanguage.arabic
+                                ? expense.category.arabicLabel
+                                : expense.category.hebrewLabel,
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: catColor),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                Text(
+                  formatCurrency(expense.amount),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(AppColorValues.primaryGold)),
+                ),
+              ],
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // 4. Dispatches Board / List
-        if (state.filteredDispatches.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: Column(
+            const SizedBox(height: 8),
+            Text(
+              expense.description,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              children: [
+                if (vehicle != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.local_shipping, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${vehicle.name.split('(').first.trim()} [${vehicle.plateNumber}]',
+                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                if (driver != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        driver.fullName.split('/').first.trim(),
+                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                if (expense.odometerReading != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.speed, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${expense.odometerReading} كم',
+                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.inbox, size: 48, color: Colors.grey),
-                    const SizedBox(height: 12),
+                    const Icon(Icons.payment, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
                     Text(
                       _currentLanguage == AppLanguage.arabic
-                          ? 'لا توجد إرساليات مطابقة للفلتر المحدد'
-                          : 'אין משלוחים התואמים לסינון הנבחר',
-                      style: const TextStyle(color: Colors.grey),
+                          ? expense.paymentMethod.arabicLabel
+                          : expense.paymentMethod.hebrewLabel,
+                      style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
+                    if (expense.reference != null) ...[
+                      const SizedBox(width: 4),
+                      Text('(${expense.reference})', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                    ],
                   ],
                 ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(dateStr, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(AppColorValues.primaryGold),
+                  side: const BorderSide(color: Color(AppColorValues.primaryGold)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                icon: const Icon(Icons.picture_as_pdf, size: 16),
+                label: Text(
+                  _currentLanguage == AppLanguage.arabic
+                      ? 'معاينة سند صرف A4 PDF'
+                      : 'הצגת שובר הוצאה A4 PDF',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () => _showExpensePdfPreview(expense),
               ),
             ),
-          )
-        else
-          ...state.filteredDispatches.map((dispatch) => _buildDispatchCard(dispatch)),
-
-        const SizedBox(height: 28),
-
-        // 5. Fleet Trucks Directory
-        _buildSectionHeader(
-          _currentLanguage == AppLanguage.arabic
-              ? 'دليل شاحنات ومركبات الأسطول / צי כלי רכב'
-              : 'צי כלי רכב / دليل شاحنات ومركبات الأسطول',
+          ],
         ),
-        const SizedBox(height: 12),
-        ..._vehicles.map((v) => _buildTruckCard(v)),
-      ],
+      ),
     );
   }
 
@@ -2419,6 +3008,493 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('خطأ في توليد PDF: $e')),
+      );
+    }
+  }
+
+  void _showNewExpenseDialog() {
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final odoCtrl = TextEditingController();
+    final refCtrl = TextEditingController();
+
+    ExpenseCategory selectedCategory = ExpenseCategory.fuel;
+    ExpensePaymentMethod selectedPayment = ExpensePaymentMethod.cash;
+    Vehicle? selectedVehicle = _vehicles.isNotEmpty ? _vehicles.first : null;
+    Driver? selectedDriver = _drivers.isNotEmpty ? _drivers.first : null;
+    String? validationError;
+
+    if (selectedVehicle != null) {
+      odoCtrl.text = selectedVehicle.currentOdometer.toString();
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.receipt_long, color: Color(AppColorValues.primaryGold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _currentLanguage == AppLanguage.arabic
+                          ? 'تسجيل سند صرف ومصروف جديد / שובר הוצאה'
+                          : 'שובר הוצאה חדש / سند صرف ومصروف',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (validationError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.redAccent),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  validationError!,
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      // Category & Amount
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<ExpenseCategory>(
+                              initialValue: selectedCategory,
+                              decoration: const InputDecoration(
+                                labelText: 'بند المصروف / קטגוריה',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: ExpenseCategory.values.map((cat) {
+                                return DropdownMenuItem(
+                                  value: cat,
+                                  child: Text(
+                                    _currentLanguage == AppLanguage.arabic
+                                        ? '${cat.arabicLabel} (${cat.hebrewLabel})'
+                                        : '${cat.hebrewLabel} (${cat.arabicLabel})',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedCategory = val);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: amountCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'المبلغ (₪) / סכום *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Description
+                      TextField(
+                        controller: descCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'البيان وتفاصيل المصروف / תיאור *',
+                          hintText: 'مثال: سولار شاحنة، صيانة كراج، تبديل إطارات...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Vehicle & Driver
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<Vehicle?>(
+                              initialValue: selectedVehicle,
+                              decoration: const InputDecoration(
+                                labelText: 'الشاحنة المخصصة / משאית',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: [
+                                const DropdownMenuItem<Vehicle?>(
+                                  value: null,
+                                  child: Text('بدون تحديد شاحنة (عام)', style: TextStyle(fontSize: 12)),
+                                ),
+                                ..._vehicles.map((v) {
+                                  return DropdownMenuItem<Vehicle?>(
+                                    value: v,
+                                    child: Text(
+                                      '${v.name.split('(').first.trim()} [${v.plateNumber}]',
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }),
+                              ],
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  selectedVehicle = val;
+                                  if (val != null) {
+                                    odoCtrl.text = val.currentOdometer.toString();
+                                  } else {
+                                    odoCtrl.clear();
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<Driver?>(
+                              initialValue: selectedDriver,
+                              decoration: const InputDecoration(
+                                labelText: 'السائق المسؤول / נהג',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: [
+                                const DropdownMenuItem<Driver?>(
+                                  value: null,
+                                  child: Text('بدون تحديد سائق', style: TextStyle(fontSize: 12)),
+                                ),
+                                ..._drivers.map((d) {
+                                  return DropdownMenuItem<Driver?>(
+                                    value: d,
+                                    child: Text(
+                                      d.fullName.split('/').first.trim(),
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  );
+                                }),
+                              ],
+                              onChanged: (val) {
+                                setDialogState(() => selectedDriver = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Odometer reading & Payment method
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: odoCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'قراءة العداد (كم) / מד אוץ',
+                                helperText: selectedVehicle != null
+                                    ? 'العداد الحالي: ${selectedVehicle!.currentOdometer} كم'
+                                    : null,
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<ExpensePaymentMethod>(
+                              initialValue: selectedPayment,
+                              decoration: const InputDecoration(
+                                labelText: 'طريقة الدفع / אמצעי תשלום',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: ExpensePaymentMethod.values.map((m) {
+                                return DropdownMenuItem(
+                                  value: m,
+                                  child: Text(
+                                    _currentLanguage == AppLanguage.arabic
+                                        ? '${m.arabicLabel} (${m.hebrewLabel})'
+                                        : '${m.hebrewLabel} (${m.arabicLabel})',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedPayment = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Reference
+                      TextField(
+                        controller: refCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الإيصال / الفاتورة الضريبية / אסמכתא',
+                          hintText: 'مثال: INV-9921, CHK-8812...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    final amt = double.tryParse(amountCtrl.text.trim());
+                    if (amt == null || amt <= 0) {
+                      setDialogState(() => validationError = 'يرجى إدخال مبلغ صحيح أكبر من صفر');
+                      return;
+                    }
+                    final desc = descCtrl.text.trim();
+                    if (desc.isEmpty) {
+                      setDialogState(() => validationError = 'يرجى إدخال بيان ووصف المصروف');
+                      return;
+                    }
+
+                    int? odo;
+                    if (odoCtrl.text.trim().isNotEmpty) {
+                      odo = int.tryParse(odoCtrl.text.trim());
+                      if (odo == null) {
+                        setDialogState(() => validationError = 'قراءة العداد غير صحيحة');
+                        return;
+                      }
+                      if (selectedVehicle != null && odo < selectedVehicle!.currentOdometer) {
+                        setDialogState(() => validationError =
+                            'قراءة العداد ($odo كم) لا يمكن أن تكون أقل من قراءة العداد الحالية (${selectedVehicle!.currentOdometer} كم)');
+                        return;
+                      }
+                    }
+
+                    try {
+                      _expensesController.setCategory(selectedCategory);
+                      _expensesController.setAmount(amt);
+                      _expensesController.setDescription(desc);
+                      _expensesController.setVehicle(selectedVehicle);
+                      _expensesController.setDriver(selectedDriver);
+                      _expensesController.setOdometerReading(odo);
+                      _expensesController.setPaymentMethod(selectedPayment);
+                      _expensesController.setReference(refCtrl.text.trim().isNotEmpty ? refCtrl.text.trim() : null);
+
+                      final newExpense = _expensesController.submitNewExpense();
+
+                      // Update local _vehicles if vehicle odometer updated
+                      if (selectedVehicle != null && odo != null && odo > selectedVehicle!.currentOdometer) {
+                        final vIdx = _vehicles.indexWhere((v) => v.id == selectedVehicle!.id);
+                        if (vIdx >= 0) {
+                          _vehicles[vIdx] = selectedVehicle!.copyWith(currentOdometer: odo);
+                        }
+                      }
+
+                      setState(() {});
+                      Navigator.of(dialogCtx).pop();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم تسجيل سند الصرف ${newExpense.expenseNumber} بنجاح'),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                          action: SnackBarAction(
+                            label: 'معاينة PDF',
+                            textColor: Colors.black,
+                            onPressed: () => _showExpensePdfPreview(newExpense),
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() => validationError = 'خطأ في تسجيل المصروف: $e');
+                    }
+                  },
+                  child: const Text('تسجيل وحفظ السند', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      amountCtrl.dispose();
+      descCtrl.dispose();
+      odoCtrl.dispose();
+      refCtrl.dispose();
+    });
+  }
+
+  Future<void> _showExpensePdfPreview(Expense expense) async {
+    const company = CompanyInfo(
+      name: 'M.I.R.N POWER Ltd.',
+      nameHebrew: 'חברת מ.י.ר.ן פאוור בע"מ',
+      nameArabic: 'شركة מ.י.ר.ן باور م.ض',
+      subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
+      subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
+      taxId: '515892104',
+      phone: '02-1234567',
+      address: 'אזור התעשייה עטרות / عطروت, ירושלים',
+    );
+
+    Vehicle? matchedVehicle;
+    if (expense.vehicleId != null) {
+      matchedVehicle = _vehicles.cast<Vehicle?>().firstWhere(
+            (v) => v?.id == expense.vehicleId,
+            orElse: () => null,
+          );
+    }
+
+    Driver? matchedDriver;
+    if (expense.driverId != null) {
+      matchedDriver = _drivers.cast<Driver?>().firstWhere(
+            (d) => d?.id == expense.driverId,
+            orElse: () => null,
+          );
+    }
+
+    try {
+      final bytes = await ExpensePdfGenerator.generate(
+        expense: expense,
+        company: company,
+        vehicle: matchedVehicle,
+        driver: matchedDriver,
+      );
+
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Color(AppColorValues.primaryGold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'معاينة سند صرف A4: ${expense.expenseNumber}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.greenAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'تم توليد سند الصرف A4 PDF بنجاح (${(bytes.length / 1024).toStringAsFixed(1)} KB) وفق معايير שובר הוצאה ותשלום الرسمية.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('بند المصروف والقيمة'),
+                    subtitle: Text(
+                      '${expense.category.arabicLabel} (${expense.category.hebrewLabel}) - ${formatCurrency(expense.amount)} [${expense.paymentMethod.arabicLabel}]',
+                    ),
+                  ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('البيان والوصف'),
+                    subtitle: Text(expense.description),
+                  ),
+                  if (matchedVehicle != null || matchedDriver != null)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('الشاحنة والسائق المنسوب لهما'),
+                      subtitle: Text(
+                        '${matchedVehicle?.name ?? "-"} | السائق: ${matchedDriver?.fullName ?? "-"} ${expense.odometerReading != null ? "(${expense.odometerReading} كم)" : ""}',
+                      ),
+                    ),
+                  if (expense.reference != null)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('رقم المرجع / الإيصال'),
+                      subtitle: Text(expense.reference!),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('إغلاق / סגור'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(AppColorValues.primaryGold),
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.print, size: 18),
+                label: const Text('طباعة سند الصرف / הדפסה'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرسال سند الصرف إلى الطابعة')),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في توليد PDF: $e'), backgroundColor: Colors.red),
       );
     }
   }
