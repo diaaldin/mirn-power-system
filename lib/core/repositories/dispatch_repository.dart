@@ -8,7 +8,6 @@ abstract class DispatchRepository {
   Future<void> updateDispatchStatus(
     String id,
     DispatchStatus status, {
-    int? completionOdometer,
-    String? cancelReason,
+    String? notes,
   });
 }
