@@ -3358,7 +3358,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     const company = CompanyInfo(
       name: 'M.I.R.N POWER Ltd.',
       nameHebrew: 'חברת מ.י.ר.ן פאוור בע"מ',
-      nameArabic: 'شركة מ.י.ר.ן باور م.ض',
+      nameArabic: 'شركة م.ي.ر.ن باور م.ض',
       subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
       subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
       taxId: '515892104',

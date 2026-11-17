@@ -98,7 +98,7 @@ class ExpenseService {
   /// - `vehicle != null && input.odometerReading != null && input.odometerReading! < vehicle.currentOdometer`
   ///   ('Odometer reading cannot be lower than current vehicle odometer')
   static Expense createExpense(CreateExpenseInput input, {Vehicle? vehicle}) {
-    if (input.amount <= 0) {
+    if (!input.amount.isFinite || input.amount <= 0) {
       throw ArgumentError.value(
         input.amount,
         'amount',
@@ -121,6 +121,14 @@ class ExpenseService {
         input.expenseNumber,
         'expenseNumber',
         'Expense number cannot be empty',
+      );
+    }
+
+    if (input.odometerReading != null && input.odometerReading! < 0) {
+      throw ArgumentError.value(
+        input.odometerReading,
+        'odometerReading',
+        'Odometer reading cannot be negative',
       );
     }
 

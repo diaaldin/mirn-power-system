@@ -122,6 +122,26 @@ void main() {
             ),
           ),
         );
+
+        final baseInputNaN = CreateExpenseInput(
+          expenseNumber: 'EXP-2026-00004-NAN',
+          date: DateTime(2026, 11, 15),
+          category: ExpenseCategory.fuel,
+          amount: double.nan,
+          description: 'NaN fuel',
+          paymentMethod: ExpensePaymentMethod.cash,
+        );
+
+        expect(
+          () => ExpenseService.createExpense(baseInputNaN),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('Expense amount must be strictly positive'),
+            ),
+          ),
+        );
       });
 
       test('rejects blank or whitespace description with ArgumentError', () {
@@ -163,6 +183,29 @@ void main() {
               (e) => e.message,
               'message',
               contains('Expense number cannot be empty'),
+            ),
+          ),
+        );
+      });
+
+      test('rejects negative odometer reading even without vehicle attached', () {
+        final negativeOdoInput = CreateExpenseInput(
+          expenseNumber: 'EXP-2026-00005-NEG',
+          date: DateTime(2026, 11, 15),
+          category: ExpenseCategory.fuel,
+          amount: 300.0,
+          description: 'Diesel fuel',
+          odometerReading: -50,
+          paymentMethod: ExpensePaymentMethod.cash,
+        );
+
+        expect(
+          () => ExpenseService.createExpense(negativeOdoInput),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('Odometer reading cannot be negative'),
             ),
           ),
         );

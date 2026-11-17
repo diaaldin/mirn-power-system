@@ -361,7 +361,7 @@ class ExpensesController {
   /// Throws [ArgumentError] if amount <= 0, description is blank, or odometer is lower
   /// than vehicle's current odometer reading.
   Expense submitNewExpense({DateTime? date, String? customExpenseNumber}) {
-    if (_state.amount <= 0) {
+    if (!_state.amount.isFinite || _state.amount <= 0) {
       const error = 'Expense amount must be strictly positive';
       _state = _state.copyWith(errorMessage: error);
       throw ArgumentError(error);
