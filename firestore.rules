@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isPositive(num) {
+      return num is number && num > 0;
+    }
+
+    function isNonNegative(num) {
+      return num is number && num >= 0;
+    }
+
+    function hasValidVat(data) {
+      return data.vatRate is number && (data.vatRate == 0.17 || data.vatRate == 0.0);
+    }
+
+    // 1. Products: Dual-unit catalog, non-negative stock
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        isNonNegative(request.resource.data.purchaseCost) &&
+        isNonNegative(request.resource.data.sellingPrice) &&
+        isNonNegative(request.resource.data.currentStock);
+      allow delete: if false; // Soft-delete or archive only
+    }
+
+    // 2. Contacts: Customer & Supplier ledger master records
+    match /contacts/{contactId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.phone is string &&
+        request.resource.data.taxId is string;
+      allow delete: if false;
+    }
+
+    // 3. Sales Invoices: Israeli Tax Invoices (חשבונית מס)
+    match /sales/{saleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.invoiceNumber is string &&
+        isPositive(request.resource.data.totalAmount) &&
+        hasValidVat(request.resource.data) &&
+        request.resource.data.customerTaxId is string;
+      allow update, delete: if false; // Tax invoices are statutory and immutable
+    }
+
+    // 4. Sales Returns: Credit Notes (חשבונית זיכוי)
+    match /credit_notes/{creditNoteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.creditNoteNumber is string &&
+        isPositive(request.resource.data.totalAmount) &&
+        hasValidVat(request.resource.data);
+      allow update, delete: if false; // Credit notes are statutory and immutable
+    }
+
+    // 5. Checks: Check Portfolio with 6-stage clearing lifecycle
+    match /checks/{checkId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.checkNumber is string &&
+        isPositive(request.resource.data.amount) &&
+        request.resource.data.bankName is string &&
+        request.resource.data.status == 'pending';
+      allow update: if isAuthenticated() &&
+        request.resource.data.status in ['pending', 'deposited', 'cleared', 'bounced', 'returned', 'endorsed'];
+      allow delete: if false;
+    }
+
+    // 6. Purchases: Supplier Stock Intake & Invoices
+    match /purchases/{purchaseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.invoiceNumber is string &&
+        isPositive(request.resource.data.totalAmount) &&
+        request.resource.data.items.size() > 0;
+      allow update, delete: if false;
+    }
+
+    // 7. Dispatches: Fleet Deliveries & Logistics
+    match /dispatches/{dispatchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.dispatchNumber is string &&
+        request.resource.data.deliveryAddress is string &&
+        request.resource.data.cargoDescription is string &&
+        request.resource.data.status in ['pending', 'dispatched', 'delivered', 'returned', 'cancelled'];
+      allow delete: if false;
+    }
+
+    // 8. Expenses: Fleet Operations & Expense Vouchers
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.expenseNumber is string &&
+        isPositive(request.resource.data.amount) &&
+        request.resource.data.description.size() > 0;
+      allow update, delete: if false;
+    }
+
+    // 9. Statement Entries: Running Ledger (كشف حساب) - STRICTLY IMMUTABLE AUDIT TRAIL
+    match /statement_entries/{entryId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.contactId is string &&
+        request.resource.data.referenceNumber is string &&
+        isNonNegative(request.resource.data.debit) &&
+        isNonNegative(request.resource.data.credit);
+      allow update, delete: if false; // Ledger entries can NEVER be modified or erased
+    }
+
+    // 10. Document Sequence Counters: Atomic Sequential Numbering
+    match /counters/{counterId} {
+      allow read: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        request.resource.data.currentSeq is int &&
+        request.resource.data.currentSeq > resource.data.currentSeq; // Monotonic only
+    }
+
+    // 11. User Profiles & Roles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}
