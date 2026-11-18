@@ -34,6 +34,7 @@ import 'features/receipts/domain/services/receipt_service.dart';
 import 'features/sales/domain/models/payment_split.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/di/firestore_service_locator.dart';
+import 'core/services/firestore_seeder.dart';
 import 'features/returns/domain/models/credit_note.dart';
 import 'features/sales/presentation/screens/sales_screen.dart';
 import 'firebase_options.dart';
@@ -845,6 +846,68 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                   : 'Executive Dashboard & Live KPIs',
         ),
         const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(AppColorValues.primaryGold), width: 0.8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_upload_outlined, color: Color(AppColorValues.primaryGold), size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentLanguage == AppLanguage.arabic
+                            ? 'تغذية السحابة بالبيانات الافتتاحية (Cloud Firestore Seeder)'
+                            : 'טעינת נתונים ראשוניים לענן / Cloud Seeder',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentLanguage == AppLanguage.arabic
+                            ? 'رفع أصناف الرخام والبورسلان، شركات المقاولات، وشاحنات النقل إلى مشروع mirn-power-system'
+                            : 'העלאת קטלוג שיש, לקוחות וצי רכב לפרויקט mirn-power-system',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(
+                    _currentLanguage == AppLanguage.arabic ? 'تغذية السحابة الآن' : 'הפעל טעינה',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('جارِ رفع البيانات الافتتاحية إلى Cloud Firestore...')),
+                    );
+                    final res = await FirestoreSeeder.seedAll();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: res.success ? Colors.green.shade800 : Colors.red.shade800,
+                          content: Text(res.message),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
