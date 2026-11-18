@@ -84,19 +84,17 @@ class ExpensePdfGenerator {
                               color: _darkSlate,
                             ),
                           ),
-                        if (company.subtitleHebrew != null &&
-                            company.subtitleHebrew!.isNotEmpty)
+                        if (company.subtitleHebrew.isNotEmpty)
                           pw.Text(
-                            company.subtitleHebrew!,
+                            company.subtitleHebrew,
                             style: const pw.TextStyle(
                               fontSize: 8,
                               color: PdfColors.grey700,
                             ),
                           ),
-                        if (company.subtitleArabic != null &&
-                            company.subtitleArabic!.isNotEmpty)
+                        if (company.subtitleArabic.isNotEmpty)
                           pw.Text(
-                            company.subtitleArabic!,
+                            company.subtitleArabic,
                             style: const pw.TextStyle(
                               fontSize: 8,
                               color: PdfColors.grey700,

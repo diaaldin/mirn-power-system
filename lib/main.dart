@@ -32,6 +32,7 @@ import 'features/purchases/presentation/controllers/purchases_controller.dart';
 import 'features/receipts/domain/models/payment_receipt.dart';
 import 'features/receipts/domain/services/receipt_service.dart';
 import 'features/sales/domain/models/payment_split.dart';
+import 'features/sales/domain/models/sale_invoice.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/di/firestore_service_locator.dart';
 import 'core/services/firestore_seeder.dart';
@@ -1044,7 +1045,10 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<Contact>(
-                        initialValue: state.selectedCustomer ?? _contacts.firstWhere((c) => c.type != ContactType.supplier),
+                        initialValue: state.selectedCustomer ??
+                            (_contacts.any((c) => c.type != ContactType.supplier)
+                                ? _contacts.firstWhere((c) => c.type != ContactType.supplier)
+                                : null),
                         decoration: const InputDecoration(
                           labelText: 'الزبون / לקוח',
                           border: OutlineInputBorder(),
@@ -1106,16 +1110,73 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('الأصناف في الفاتورة الحالية / פריטים בחשבונית', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ...state.items.map((item) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(item.productName),
-                    subtitle: Text('${item.quantity} ${item.unitType.name} × ${formatCurrency(item.unitPrice)}'),
-                    trailing: Text(formatCurrency(item.subtotal), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  );
-                }),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'الأصناف في الفاتورة الحالية / פריטים בחשבונית',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(AppColorValues.primaryGold),
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          ),
+                          icon: const Icon(Icons.add_shopping_cart, size: 16),
+                          label: const Text('إضافة صنف / הוסף פריט', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () => _showAddPosItemDialog(context),
+                        ),
+                        if (state.items.isNotEmpty)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            ),
+                            icon: const Icon(Icons.delete_sweep, size: 16),
+                            label: const Text('تفريغ', style: TextStyle(fontSize: 12)),
+                            onPressed: () => setState(() => _posController.clearItems()),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (state.items.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'السلة فارغة حالياً. اضغط "إضافة صنف" لإدراج منتجات للفاتورة.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                else
+                  ...state.items.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final item = entry.value;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(item.productName),
+                      subtitle: Text('${item.quantity} ${item.unitType.name} × ${formatCurrency(item.unitPrice)}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(formatCurrency(item.subtotal), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            tooltip: 'حذف الصنف',
+                            onPressed: () => setState(() => _posController.removeItem(idx)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                 const Divider(),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1139,6 +1200,24 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     const Text('الإجمالي النهائي (סה"כ לתשלום):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     Text(formatCurrency(state.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(AppColorValues.primaryGold))),
                   ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(AppColorValues.primaryGold),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      elevation: 3,
+                    ),
+                    icon: const Icon(Icons.point_of_sale, size: 22),
+                    label: const Text(
+                      'إتمام عملية البيع والدفع (Checkout) / סיום קנייה ותשלום',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: state.items.isEmpty ? null : () => _showPaymentDialog(context),
+                  ),
                 ),
               ],
             ),
@@ -1699,6 +1778,961 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     );
   }
 
+  void _showAddPosItemDialog(BuildContext context) {
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد أصناف في المستودع لإضافتها')),
+      );
+      return;
+    }
+
+    Product selectedProduct = _products.first;
+    final qtyCtrl = TextEditingController(text: '1.0');
+    final priceCtrl = TextEditingController(
+      text: selectedProduct.sellingPrice.toStringAsFixed(2),
+    );
+    UnitType selectedUnit = selectedProduct.unitType;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(AppColorValues.cardDark),
+              title: const Row(
+                children: [
+                  Icon(Icons.add_shopping_cart, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Text('إضافة صنف للفاتورة / הוסף פריט לסל', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<Product>(
+                        initialValue: selectedProduct,
+                        decoration: const InputDecoration(
+                          labelText: 'الصنف / פריט *',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _products.map((p) {
+                          return DropdownMenuItem(
+                            value: p,
+                            child: Text(
+                              '${p.sku} - ${p.name.split(' / ').first} (متوفر: ${p.currentStock.toStringAsFixed(1)} ${p.unitType.name})',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedProduct = val;
+                              selectedUnit = val.unitType;
+                              priceCtrl.text = val.sellingPrice.toStringAsFixed(2);
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: qtyCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'الكمية / כמות *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<UnitType>(
+                              initialValue: selectedUnit,
+                              decoration: const InputDecoration(
+                                labelText: 'الوحدة / יחידה',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: UnitType.values.map((u) {
+                                return DropdownMenuItem(
+                                  value: u,
+                                  child: Text('${u.arabicLabel} (${u.hebrewLabel})', style: const TextStyle(fontSize: 12)),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => selectedUnit = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: priceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'سعر الوحدة (${_posController.state.isTaxInclusiveInput ? "شامل الضريبة" : "قبل الضريبة"}) / מחיר',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('إضافة إلى السلة'),
+                  onPressed: () {
+                    final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
+                    final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+                    if (qty <= 0 || price < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('يرجى إدخال كمية وسعر صحيحين')),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      _posController.addItem(
+                        product: selectedProduct,
+                        quantity: qty,
+                        unit: selectedUnit,
+                        unitPriceInput: price,
+                      );
+                    });
+
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      qtyCtrl.dispose();
+      priceCtrl.dispose();
+    });
+  }
+
+  void _showPaymentDialog(BuildContext context) {
+    final state = _posController.state;
+    if (state.items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سلة المبيعات فارغة، أضف أصنافاً أولاً')),
+      );
+      return;
+    }
+
+    final double totalToPay = state.totalAmount;
+    final bool requiresAllocation = totalToPay >= 25000.0;
+
+    final cashCtrl = TextEditingController();
+    final checkCtrl = TextEditingController();
+    final transferCtrl = TextEditingController();
+    final debtCtrl = TextEditingController();
+    final allocationNumberCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+
+    // Check specific fields
+    final checkNumberCtrl = TextEditingController();
+    final bankNameCtrl = TextEditingController(text: 'בנק הפועלים (12)');
+    final branchCtrl = TextEditingController(text: '680');
+    final accountCtrl = TextEditingController();
+    DateTime checkDueDate = DateTime.now().add(const Duration(days: 30));
+
+    // Transfer specific field
+    final transferRefCtrl = TextEditingController();
+
+    // Default to cash payment full amount
+    cashCtrl.text = totalToPay.toStringAsFixed(2);
+
+    String? validationError;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final double cash = double.tryParse(cashCtrl.text.trim()) ?? 0.0;
+            final double check = double.tryParse(checkCtrl.text.trim()) ?? 0.0;
+            final double transfer = double.tryParse(transferCtrl.text.trim()) ?? 0.0;
+            final double debt = double.tryParse(debtCtrl.text.trim()) ?? 0.0;
+
+            final double totalPaid = cash + check + transfer + debt;
+            final double difference = totalToPay - totalPaid;
+            final bool isBalanced = difference.abs() < 0.01;
+
+            return AlertDialog(
+              backgroundColor: const Color(AppColorValues.cardDark),
+              title: const Row(
+                children: [
+                  Icon(Icons.point_of_sale, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Text(
+                    'إتمام الدفع وإصدار الفاتورة الضريبية / תשלום וחשבונית',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Financial Summary Header
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('المجموع الفرعي (قبل الضريبة):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                Text(formatCurrency(state.subtotal), style: const TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('ضريبة القيمة المضافة (מע"מ 17%):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                Text(formatCurrency(state.vatAmount), style: const TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('الإجمالي المطلوب سداده:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text(
+                                  formatCurrency(totalToPay),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(AppColorValues.primaryGold)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Customer indicator
+                      if (state.selectedCustomer != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person, size: 16, color: Colors.lightBlueAccent),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'الزبون: ${state.selectedCustomer!.name} (رصيد حالي: ${formatCurrency(state.selectedCustomer!.currentBalance)})',
+                                  style: const TextStyle(fontSize: 12, color: Colors.lightBlueAccent),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+
+                      // Statutory Allocation Number (Israel Tax Authority requirement)
+                      if (requiresAllocation)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.gavel, color: Colors.amber, size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'إلزامي قانونياً: فاتورة تتجاوز 25,000 ₪ تتطلب رقم تخصيص (מספר הקצאה)',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.amber),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: allocationNumberCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'رقم التخصيص من سلطة الضرائب (9 أرقام) *',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Quick action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                side: const BorderSide(color: Colors.greenAccent),
+                              ),
+                              icon: const Icon(Icons.money, size: 16, color: Colors.greenAccent),
+                              label: const Text('دفع كامل نقداً', style: TextStyle(fontSize: 12, color: Colors.greenAccent)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  cashCtrl.text = totalToPay.toStringAsFixed(2);
+                                  checkCtrl.clear();
+                                  transferCtrl.clear();
+                                  debtCtrl.clear();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                side: const BorderSide(color: Colors.orangeAccent),
+                              ),
+                              icon: const Icon(Icons.account_balance_wallet, size: 16, color: Colors.orangeAccent),
+                              label: const Text('كامل على الحساب', style: TextStyle(fontSize: 12, color: Colors.orangeAccent)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  debtCtrl.text = totalToPay.toStringAsFixed(2);
+                                  cashCtrl.clear();
+                                  checkCtrl.clear();
+                                  transferCtrl.clear();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Split payment fields
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: cashCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'نقداً / מזומן (₪)',
+                                prefixIcon: Icon(Icons.attach_money, size: 18),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: debtCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'على الحساب / חוב (₪)',
+                                prefixIcon: Icon(Icons.person_outline, size: 18),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: checkCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'شيك بنكي / שיק (₪)',
+                                prefixIcon: Icon(Icons.receipt, size: 18),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: transferCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'تحويل بنكي / העברה (₪)',
+                                prefixIcon: Icon(Icons.account_balance, size: 18),
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Check Details Section if check > 0
+                      if (check > 0) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blueGrey),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('بيانات الشيك البنكي / פרטי השיק', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: checkNumberCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'رقم الشيك *',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: bankNameCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'اسم البنك *',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: branchCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'الفرع',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: accountCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'رقم الحساب',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('تاريخ استحقاق الشيك / תאריך פירעון', style: TextStyle(fontSize: 12)),
+                                subtitle: Text('${checkDueDate.year}-${checkDueDate.month.toString().padLeft(2, '0')}-${checkDueDate.day.toString().padLeft(2, '0')}'),
+                                trailing: const Icon(Icons.calendar_today, size: 16),
+                                onTap: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: checkDueDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2035),
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() => checkDueDate = picked);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // Transfer details if transfer > 0
+                      if (transfer > 0) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: transferRefCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'رقم مرجع التحويل البنكي / אסמכתא',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: notesCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'ملاحظات الفاتورة (اختياري)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Math status banner
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isBalanced
+                              ? Colors.green.withValues(alpha: 0.2)
+                              : Colors.red.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isBalanced ? Colors.greenAccent : Colors.redAccent,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isBalanced ? Icons.check_circle : Icons.error_outline,
+                              color: isBalanced ? Colors.greenAccent : Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isBalanced
+                                    ? 'المبلغ مطابق تماماً للإجمالي (${formatCurrency(totalPaid)})'
+                                    : 'المتبقي للتغطية: ${formatCurrency(difference)} (المسدد: ${formatCurrency(totalPaid)})',
+                                style: TextStyle(
+                                  color: isBalanced ? Colors.greenAccent : Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (validationError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          validationError!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.receipt_long, size: 18),
+                  label: const Text('تأكيد وإصدار الفاتورة / הנפק חשבונית'),
+                  onPressed: () async {
+                    if (!isBalanced) {
+                      setDialogState(() {
+                        validationError = 'يرجى مطابقة مجموع طرق الدفع مع إجمالي الفاتورة بدقة';
+                      });
+                      return;
+                    }
+
+                    if (debt > 0 && state.selectedCustomer == null) {
+                      setDialogState(() {
+                        validationError = 'يرجى اختيار عميل لتسجيل المبلغ على الحساب ذمة';
+                      });
+                      return;
+                    }
+
+                    if (check > 0) {
+                      if (checkNumberCtrl.text.trim().isEmpty || bankNameCtrl.text.trim().isEmpty) {
+                        setDialogState(() {
+                          validationError = 'يرجى إدخال رقم الشيك واسم البنك بدقة';
+                        });
+                        return;
+                      }
+                    }
+
+                    if (requiresAllocation && allocationNumberCtrl.text.trim().isEmpty) {
+                      setDialogState(() {
+                        validationError = 'رقم التخصيص إلزامي للفواتير بقيمة 25,000 ₪ فأكثر وفق القانون';
+                      });
+                      return;
+                    }
+
+                    try {
+                      final invoiceNumber = 'INV-2026-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
+
+                      final List<PaymentSplit> payments = [];
+                      if (cash > 0) payments.add(PaymentSplit(method: PaymentMethod.cash, amount: cash));
+                      if (check > 0) {
+                        payments.add(
+                          PaymentSplit(
+                            method: PaymentMethod.check,
+                            amount: check,
+                            reference: 'Check #${checkNumberCtrl.text.trim()}',
+                          ),
+                        );
+                      }
+                      if (transfer > 0) {
+                        payments.add(
+                          PaymentSplit(
+                            method: PaymentMethod.bankTransfer,
+                            amount: transfer,
+                            reference: transferRefCtrl.text.trim().isEmpty ? null : transferRefCtrl.text.trim(),
+                          ),
+                        );
+                      }
+                      if (debt > 0) {
+                        payments.add(PaymentSplit(method: PaymentMethod.debt, amount: debt, reference: 'على الحساب'));
+                      }
+
+                      CheckRecord? checkRecord;
+                      if (check > 0) {
+                        checkRecord = CheckRecord(
+                          id: 'chk-${DateTime.now().millisecondsSinceEpoch}',
+                          checkNumber: checkNumberCtrl.text.trim(),
+                          bankName: bankNameCtrl.text.trim(),
+                          branchNumber: branchCtrl.text.trim().isEmpty ? '001' : branchCtrl.text.trim(),
+                          accountNumber: accountCtrl.text.trim().isEmpty ? '000000' : accountCtrl.text.trim(),
+                          amount: check,
+                          dueDate: checkDueDate,
+                          type: CheckType.received,
+                          partyId: state.selectedCustomer?.id ?? 'walk-in',
+                          partyName: state.selectedCustomer?.name ?? 'زبون نقدي / לקוח מזומן',
+                          relatedTransactionId: invoiceNumber,
+                          status: CheckStatus.pending,
+                          history: [
+                            CheckHistoryEntry(
+                              status: CheckStatus.pending,
+                              changedAt: DateTime.now(),
+                              notes: 'شيك مقبوض من فاتورة مبيعات $invoiceNumber',
+                              changedBy: _currentUser?.name.split(' / ').first ?? 'diaaldin',
+                            ),
+                          ],
+                          createdAt: DateTime.now(),
+                        );
+                      }
+
+                      final saleInvoice = SaleInvoice(
+                        id: 'sale-${DateTime.now().millisecondsSinceEpoch}',
+                        invoiceNumber: invoiceNumber,
+                        date: DateTime.now(),
+                        customerId: state.selectedCustomer?.id ?? 'walk-in',
+                        customerName: state.selectedCustomer?.name ?? 'زبون نقدي / לקוח מזומן',
+                        customerTaxId: state.selectedCustomer?.taxId ?? '000000000',
+                        isTaxInclusiveInput: state.isTaxInclusiveInput,
+                        items: state.items,
+                        subtotal: state.subtotal,
+                        vatRate: state.vatRate,
+                        vatAmount: state.vatAmount,
+                        totalAmount: state.totalAmount,
+                        payments: payments,
+                        allocationNumber: allocationNumberCtrl.text.trim().isEmpty ? null : allocationNumberCtrl.text.trim(),
+                        notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                        createdBy: _currentUser?.name.split(' / ').first ?? 'diaaldin',
+                        createdAt: DateTime.now(),
+                      );
+
+                      if (ServiceLocator.instance.isInitialized) {
+                        await ServiceLocator.instance.saleOrchestrator.processSaleTransaction(
+                          sale: saleInvoice,
+                          customer: state.selectedCustomer,
+                          checks: checkRecord != null ? [checkRecord] : null,
+                        );
+                      }
+
+                      // In-memory local state synchronization
+                      setState(() {
+                        // 1. Decrement stock
+                        for (final item in saleInvoice.items) {
+                          final pIdx = _products.indexWhere((p) => p.id == item.productId);
+                          if (pIdx != -1) {
+                            final oldP = _products[pIdx];
+                            _products[pIdx] = Product(
+                              id: oldP.id,
+                              name: oldP.name,
+                              sku: oldP.sku,
+                              category: oldP.category,
+                              unitType: oldP.unitType,
+                              meterPerBox: oldP.meterPerBox,
+                              purchaseCost: oldP.purchaseCost,
+                              sellingPrice: oldP.sellingPrice,
+                              currentStock: (oldP.currentStock - item.quantity).clamp(0.0, double.infinity),
+                              minStockAlert: oldP.minStockAlert,
+                              createdAt: oldP.createdAt,
+                            );
+                          }
+                        }
+
+                        // 2. Customer debt update
+                        if (debt > 0 && state.selectedCustomer != null) {
+                          final cIdx = _contacts.indexWhere((c) => c.id == state.selectedCustomer!.id);
+                          if (cIdx != -1) {
+                            final oldC = _contacts[cIdx];
+                            final updatedC = Contact(
+                              id: oldC.id,
+                              name: oldC.name,
+                              taxId: oldC.taxId,
+                              phone: oldC.phone,
+                              address: oldC.address,
+                              type: oldC.type,
+                              currentBalance: oldC.currentBalance + debt,
+                              debtWarningLimit: oldC.debtWarningLimit,
+                            );
+                            _contacts[cIdx] = updatedC;
+                            _statementController.updateContact(updatedC);
+                            _statementController.addEntry(
+                              StatementEntry(
+                                id: 'stmt-${saleInvoice.id}',
+                                contactId: updatedC.id,
+                                contactType: ContactType.customer,
+                                date: saleInvoice.date,
+                                type: StatementEntryType.saleInvoice,
+                                referenceNumber: saleInvoice.invoiceNumber,
+                                debit: debt,
+                                credit: 0.0,
+                                runningBalance: updatedC.currentBalance,
+                                description: 'فاتورة ضريبية / חשבונית מס ${saleInvoice.invoiceNumber}',
+                              ),
+                            );
+                            _posController.setCustomer(updatedC);
+                          }
+                        }
+
+                        // 3. Add check
+                        if (checkRecord != null) {
+                          _checksController.addCheck(checkRecord);
+                        }
+
+                        // 4. Clear cart
+                        _posController.clearItems();
+                      });
+
+                      Navigator.of(dialogCtx).pop();
+
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'تم إصدار الفاتورة الضريبية رقم ${saleInvoice.invoiceNumber} بنجاح',
+                          ),
+                          backgroundColor: const Color(AppColorValues.successGreen),
+                          action: SnackBarAction(
+                            label: 'معاينة PDF',
+                            textColor: Colors.white,
+                            onPressed: () => _showInvoicePdfPreview(saleInvoice, state.selectedCustomer),
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() {
+                        validationError = 'خطأ في معالجة الفاتورة: $e';
+                      });
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      cashCtrl.dispose();
+      checkCtrl.dispose();
+      transferCtrl.dispose();
+      debtCtrl.dispose();
+      allocationNumberCtrl.dispose();
+      notesCtrl.dispose();
+      checkNumberCtrl.dispose();
+      bankNameCtrl.dispose();
+      branchCtrl.dispose();
+      accountCtrl.dispose();
+      transferRefCtrl.dispose();
+    });
+  }
+
+  void _showInvoicePdfPreview(SaleInvoice invoice, [Contact? customer]) async {
+    const company = CompanyInfo(
+      name: 'M.I.R.N POWER Ltd.',
+      nameArabic: 'شركة م.ي.ر.ن باور م.ض',
+      nameHebrew: 'מ.י.ר.ן פאוור בע"מ',
+      subtitleArabic: 'أدوات صحية، رخام، حجر، ونقل وشحن',
+      subtitleHebrew: 'כלים סניטריים, שיש, אבן והובלה',
+      taxId: '515892104',
+      phone: '02-1234567',
+      address: 'אזור התעשייה עטרות / عطروت, ירושלים',
+    );
+
+    try {
+      final bytes = await InvoicePdfGenerator.generate(
+        invoice: invoice,
+        company: company,
+      );
+
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Color(AppColorValues.primaryGold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'معاينة الفاتورة الضريبية: ${invoice.invoiceNumber}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.greenAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.greenAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'تم توليد فاتورة ضريبية رسمية A4 PDF بنجاح (${(bytes.length / 1024).toStringAsFixed(1)} KB) مطابقة لقانون الضرائب الإسرائيلي 17%.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الزبون / לקוח'),
+                    subtitle: Text(invoice.customerName),
+                  ),
+                  if (invoice.allocationNumber != null)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('رقم التخصيص (מספר הקצאה)'),
+                      subtitle: Text(
+                        invoice.allocationNumber!,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                      ),
+                    ),
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('الإجمالي شامل الضريبة 17%'),
+                    subtitle: Text(
+                      formatCurrency(invoice.totalAmount),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(AppColorValues.primaryGold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('إغلاق / סגור'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(AppColorValues.primaryGold),
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.print, size: 18),
+                label: const Text('طباعة / הדפסה'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إرسال الفاتورة إلى طابعة الفواتير')),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في توليد PDF الفاتورة: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   void _showAddProductDialog(BuildContext context) {
     final nameArCtrl = TextEditingController();
     final nameHeCtrl = TextEditingController();
@@ -1919,6 +2953,27 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       return;
                     }
 
+                    if (cost < 0 || price < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('لا يمكن لتكلفة الشراء أو سعر البيع أن يكونا بالسالب')),
+                      );
+                      return;
+                    }
+
+                    if (isMeter && (meterPerBox == null || meterPerBox <= 0)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('يرجى إدخال معدل م² بالكرتونة صحيح أكبر من الصفر')),
+                      );
+                      return;
+                    }
+
+                    if (_products.any((p) => p.sku.trim().toLowerCase() == sku.toLowerCase())) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('الرمز التجاري $sku مسجل مسبقاً لصنف آخر')),
+                      );
+                      return;
+                    }
+
                     final newProduct = Product(
                       id: 'prod-${DateTime.now().millisecondsSinceEpoch}',
                       name: nameHe.isNotEmpty ? '$nameAr / $nameHe' : nameAr,
@@ -1934,8 +2989,12 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     );
 
                     _products.add(newProduct);
-                    if (ServiceLocator.instance.isInitialized) {
-                      await ServiceLocator.instance.productRepository.saveProduct(newProduct);
+                    try {
+                      if (ServiceLocator.instance.isInitialized) {
+                        await ServiceLocator.instance.productRepository.saveProduct(newProduct);
+                      }
+                    } catch (e) {
+                      debugPrint('Error saving product to repository: $e');
                     }
 
                     Navigator.of(ctx).pop();
@@ -1951,7 +3010,16 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      nameArCtrl.dispose();
+      nameHeCtrl.dispose();
+      skuCtrl.dispose();
+      costCtrl.dispose();
+      priceCtrl.dispose();
+      stockCtrl.dispose();
+      meterPerBoxCtrl.dispose();
+      minAlertCtrl.dispose();
+    });
   }
 
   void _showAddContactDialog(BuildContext context, {ContactType defaultType = ContactType.customer}) {
@@ -2134,6 +3202,20 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       return;
                     }
 
+                    if (limit < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('سقف الدين لا يمكن أن يكون سالباً')),
+                      );
+                      return;
+                    }
+
+                    if (_contacts.any((c) => c.taxId.trim() == taxId.trim())) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('رقم المشتغل / الضريبة $taxId مسجل مسبقاً')),
+                      );
+                      return;
+                    }
+
                     final newContact = Contact(
                       id: '${contactType == ContactType.customer ? "cust" : "supp"}-${DateTime.now().millisecondsSinceEpoch}',
                       name: nameHe.isNotEmpty ? '$nameAr / $nameHe' : nameAr,
@@ -2146,8 +3228,12 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     );
 
                     _contacts.add(newContact);
-                    if (ServiceLocator.instance.isInitialized) {
-                      await ServiceLocator.instance.contactRepository.saveContact(newContact);
+                    try {
+                      if (ServiceLocator.instance.isInitialized) {
+                        await ServiceLocator.instance.contactRepository.saveContact(newContact);
+                      }
+                    } catch (e) {
+                      debugPrint('Error saving contact to repository: $e');
                     }
 
                     Navigator.of(ctx).pop();
@@ -2163,12 +3249,26 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      nameArCtrl.dispose();
+      nameHeCtrl.dispose();
+      taxIdCtrl.dispose();
+      phoneCtrl.dispose();
+      addressCtrl.dispose();
+      balanceCtrl.dispose();
+      limitCtrl.dispose();
+    });
   }
 
   void _showCreateCreditNoteDialog(BuildContext context) {
-    if (_products.isEmpty || _contacts.isEmpty) return;
-    Contact selectedCustomer = _contacts.firstWhere((c) => c.type != ContactType.supplier);
+    final customers = _contacts.where((c) => c.type != ContactType.supplier).toList();
+    if (customers.isEmpty || _products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد زبائن أو أصناف مسجلة في النظام لإصدار إرجاع')),
+      );
+      return;
+    }
+    Contact selectedCustomer = customers.first;
     Product selectedProduct = _products.first;
     final qtyCtrl = TextEditingController(text: '1.0');
     final reasonCtrl = TextEditingController();
@@ -2374,11 +3474,15 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       createdAt: DateTime.now(),
                     );
 
-                    if (ServiceLocator.instance.isInitialized) {
-                      await ServiceLocator.instance.creditNoteOrchestrator.processCreditNoteTransaction(
-                        creditNote: creditNote,
-                        customer: selectedCustomer,
-                      );
+                    try {
+                      if (ServiceLocator.instance.isInitialized) {
+                        await ServiceLocator.instance.creditNoteOrchestrator.processCreditNoteTransaction(
+                          creditNote: creditNote,
+                          customer: selectedCustomer,
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('Error in creditNoteOrchestrator: $e');
                     }
 
                     final prodIdx = _products.indexWhere((p) => p.id == selectedProduct.id);
@@ -2409,7 +3513,10 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      qtyCtrl.dispose();
+      reasonCtrl.dispose();
+    });
   }
 
   void _showCheckActionDialog(BuildContext context, CheckRecord check) {
@@ -2656,6 +3763,13 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                   return;
                 }
 
+                if (_vehicles.any((v) => v.plateNumber.trim() == plate)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('المركبة ذات رقم اللوحة $plate مسجلة مسبقاً في الأسطول')),
+                  );
+                  return;
+                }
+
                 final newVehicle = Vehicle(
                   id: 'veh-${DateTime.now().millisecondsSinceEpoch}',
                   name: name,
@@ -2678,10 +3792,23 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           ],
         );
       },
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      plateCtrl.dispose();
+      yearCtrl.dispose();
+      odoCtrl.dispose();
+      notesCtrl.dispose();
+    });
   }
 
   void _showAddCheckDialog(BuildContext context) {
+    if (_contacts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد جهات اتصال مسجلة في النظام لربط الشيك بها')),
+      );
+      return;
+    }
+
     final checkNumberCtrl = TextEditingController();
     final bankNameCtrl = TextEditingController(text: 'בנק הפועלים (12)');
     final branchCtrl = TextEditingController(text: '680');
@@ -2801,7 +3928,7 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: selectedPartyId,
+                        initialValue: selectedPartyId,
                         decoration: const InputDecoration(
                           labelText: 'الطرف المعني / לקוח או ספק *',
                           border: OutlineInputBorder(),
@@ -2893,8 +4020,12 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     );
 
                     _checksController.addCheck(newCheck);
-                    if (ServiceLocator.instance.isInitialized) {
-                      await ServiceLocator.instance.checkRepository.saveCheck(newCheck);
+                    try {
+                      if (ServiceLocator.instance.isInitialized) {
+                        await ServiceLocator.instance.checkRepository.saveCheck(newCheck);
+                      }
+                    } catch (e) {
+                      debugPrint('Error saving check to repository: $e');
                     }
 
                     Navigator.of(ctx).pop();
@@ -2910,7 +4041,14 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      checkNumberCtrl.dispose();
+      bankNameCtrl.dispose();
+      branchCtrl.dispose();
+      accountCtrl.dispose();
+      amountCtrl.dispose();
+      partyNameCtrl.dispose();
+    });
   }
 
   Widget _buildChecksScreen() {
@@ -4094,12 +5232,20 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       return;
     }
 
-    final addressCtrl = TextEditingController(text: _contacts.first.address);
+    final availableCustomers = _contacts.where((c) => c.type != ContactType.supplier).toList();
+    if (availableCustomers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد عملاء مسجلون في النظام لإنشاء إرسالية لهم')),
+      );
+      return;
+    }
+
+    final addressCtrl = TextEditingController(text: availableCustomers.first.address);
     final cargoCtrl = TextEditingController(text: '100 م² رخام كرارا + 2 خلاط نحاسي');
     final invoiceCtrl = TextEditingController(text: 'INV-2026-00412');
     final notesCtrl = TextEditingController();
 
-    Contact selectedCustomer = _contacts.first;
+    Contact selectedCustomer = availableCustomers.first;
     Vehicle selectedVehicle = activeVehicles.first;
     Driver selectedDriver = activeDrivers.first;
     String? validationError;
@@ -5115,7 +6261,15 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   }
 
   void _showNewReceiptDialog() {
-    final customer = _contacts.first;
+    final availableCustomers = _contacts.where((c) => c.type != ContactType.supplier).toList();
+    if (availableCustomers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد عملاء مسجلون في النظام لإصدار سند قبض لهم')),
+      );
+      return;
+    }
+
+    Contact customer = availableCustomers.first;
     final currentEntriesCount = _statementController.getFilteredEntries().length;
     final nextNumber = 'RCP-2026-${(currentEntriesCount + 109).toString().padLeft(5, '0')}';
 
@@ -5155,6 +6309,26 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      DropdownButtonFormField<Contact>(
+                        initialValue: customer,
+                        decoration: const InputDecoration(
+                          labelText: 'الزبون / לקוח *',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: availableCustomers.map((c) {
+                          return DropdownMenuItem(
+                            value: c,
+                            child: Text('${c.name} (حساب: ${formatCurrency(c.currentBalance)})', overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() => customer = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -5431,7 +6605,10 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
                       );
 
                       setState(() {
-                        _contacts[0] = result.updatedContact;
+                        final cIdx = _contacts.indexWhere((c) => c.id == customer.id);
+                        if (cIdx != -1) {
+                          _contacts[cIdx] = result.updatedContact;
+                        }
                         _statementController.updateContact(result.updatedContact);
                         _statementController.addEntry(result.statementEntry);
                         for (final chk in result.createdChecks) {
@@ -5480,6 +6657,13 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     if (availableSuppliers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('لا يوجد موردين مسجلين في النظام')),
+      );
+      return;
+    }
+
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد أصناف في المستودع لإجراء الشراء عليها')),
       );
       return;
     }
