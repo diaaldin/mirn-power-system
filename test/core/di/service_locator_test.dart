@@ -56,6 +56,8 @@ void main() {
       expect(ServiceLocator.instance.purchaseOrchestrator, isNotNull);
       expect(ServiceLocator.instance.creditNoteOrchestrator, isNotNull);
       expect(ServiceLocator.instance.checkLifecycleOrchestrator, isNotNull);
+      expect(ServiceLocator.instance.authRepository, isNotNull);
+      expect(ServiceLocator.instance.authRepository.currentUser, isNotNull);
 
       ServiceLocator.instance.dispose();
       expect(ServiceLocator.instance.isInitialized, isFalse);

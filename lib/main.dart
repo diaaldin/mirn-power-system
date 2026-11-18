@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'core/localization/app_locale.dart';
@@ -7,6 +8,8 @@ import 'core/pdf/invoice_pdf_generator.dart';
 import 'core/pdf/purchase_pdf_generator.dart';
 import 'core/theme/mirn_theme.dart';
 import 'core/utils/currency_formatter.dart';
+import 'core/di/service_locator.dart';
+import 'features/auth/domain/models/app_user.dart';
 import 'features/accounts/domain/models/contact.dart';
 import 'features/accounts/domain/models/statement_entry.dart';
 import 'features/accounts/presentation/screens/statement_screen.dart';
@@ -261,10 +264,22 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   late final ExpensesController _expensesController;
   int _fleetSubTabIndex = 0;
   final SalesPosController _posController = SalesPosController();
+  AppUser? _currentUser;
+  StreamSubscription<AppUser?>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    if (!ServiceLocator.instance.isInitialized) {
+      ServiceLocator.instance.initialize(
+        initialProducts: _products,
+        initialContacts: _contacts,
+      );
+    }
+    _currentUser = ServiceLocator.instance.authRepository.currentUser;
+    _authSubscription = ServiceLocator.instance.authRepository.watchCurrentUser().listen((user) {
+      if (mounted) setState(() => _currentUser = user);
+    });
     _checksController = ChecksScreenController(
       initialChecks: [
         CheckRecord(
@@ -513,6 +528,12 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
   }
 
   @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     const goldColor = Color(AppColorValues.primaryGold);
     const bgDark = Color(AppColorValues.deepBlack);
@@ -571,6 +592,79 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
               ],
             ),
             actions: [
+              if (_currentUser != null)
+                PopupMenuButton<String>(
+                  tooltip: 'تبديل المستخدم والصلاحيات / החלף משתמש',
+                  color: surfaceDark,
+                  offset: const Offset(0, 48),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: goldColor.withValues(alpha: 0.15),
+                      border: Border.all(color: goldColor.withValues(alpha: 0.5)),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.account_circle, size: 18, color: goldColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${_currentUser!.name.split(' / ').first} (${_currentLanguage == AppLanguage.arabic ? _currentUser!.role.arabicLabel : _currentUser!.role.hebrewLabel})',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: goldColor),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 16, color: goldColor),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem<String>(
+                      enabled: false,
+                      child: Text('اختر المستخدم / בחר משתמש', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'usr-admin',
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(Icons.admin_panel_settings, color: Colors.amber),
+                        title: Text('ضياء الدين (مدير النظام)'),
+                        subtitle: Text('صلاحيات كاملة لجميع الأنظمة'),
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'usr-acc',
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(Icons.account_balance, color: Colors.lightBlue),
+                        title: Text('أحمد النتشة (محاسب مالي)'),
+                        subtitle: Text('كشوفات حساب، شيكات، فواتير'),
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'usr-cashier',
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(Icons.point_of_sale, color: Colors.green),
+                        title: Text('سامح الجعبري (كاشير مبيعات)'),
+                        subtitle: Text('كاونتر المبيعات وسندات القبض'),
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'usr-disp',
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(Icons.local_shipping, color: Colors.orange),
+                        title: Text('خليل بركات (سيدر نقليات)'),
+                        subtitle: Text('إرساليات الأسطول ومصاريف التشغيل'),
+                      ),
+                    ),
+                  ],
+                  onSelected: (userId) async {
+                    await ServiceLocator.instance.authRepository.switchUser(userId);
+                  },
+                ),
+              const SizedBox(width: 8),
               DropdownButton<AppLanguage>(
                 value: _currentLanguage,
                 underline: const SizedBox(),
@@ -643,19 +737,82 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     }
   }
 
+  Widget _buildAccessRestrictedView(String requiredRole, IconData icon) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        constraints: const BoxConstraints(maxWidth: 480),
+        decoration: BoxDecoration(
+          color: const Color(AppColorValues.cardDark),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 48, color: Colors.redAccent),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'صلاحية مقيدة / גישה מוגבלת (RBAC)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'هذه الشاشة تتطلب صلاحية: $requiredRole.\nמשתמש נוכחי חסר הרשאות מתאימות לצפייה במסך זה.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(AppColorValues.primaryGold),
+                foregroundColor: Colors.black,
+              ),
+              icon: const Icon(Icons.swap_horiz, size: 18),
+              label: const Text('تبديل المستخدم إلى مدير النظام / החלף משתמש'),
+              onPressed: () async {
+                await ServiceLocator.instance.authRepository.switchUser('usr-admin');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCurrentScreen() {
+    final user = _currentUser;
     switch (_selectedTabIndex) {
       case 0:
         return _buildDashboardScreen();
       case 1:
+        if (user != null && !user.canAccessPos) {
+          return _buildAccessRestrictedView('كاشير مبيعات أو مدير نظام (קופאי / מנהל)', Icons.point_of_sale);
+        }
         return _buildSalesPosScreen();
       case 2:
         return _buildInventoryScreen();
       case 3:
+        if (user != null && !user.canManageLedgers) {
+          return _buildAccessRestrictedView('محاسب مالي أو مدير نظام (רואה חשבון / מנהל)', Icons.account_balance_wallet);
+        }
         return _buildStatementScreen();
       case 4:
+        if (user != null && !user.canManageChecks) {
+          return _buildAccessRestrictedView('إدارة الشيكات والمقاصة (רואה חשבון / מנהל)', Icons.fact_check);
+        }
         return _buildChecksScreen();
       case 5:
+        if (user != null && !user.canDispatchFleet && !user.canRecordExpenses) {
+          return _buildAccessRestrictedView('سيدر نقليات أو مدير أسطول (סדרן צי / מנהל)', Icons.local_shipping);
+        }
         return _buildFleetScreen();
       default:
         return _buildDashboardScreen();

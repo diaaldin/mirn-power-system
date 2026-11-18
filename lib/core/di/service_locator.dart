@@ -19,6 +19,8 @@ import '../../features/sales/domain/services/sale_transaction_orchestrator.dart'
 import '../../features/inventory/domain/models/product.dart';
 import '../../features/accounts/domain/models/contact.dart';
 import '../../features/checks/domain/models/check_record.dart';
+import '../../features/auth/domain/repositories/auth_repository.dart';
+import '../../features/auth/domain/repositories/in_memory_auth_repository.dart';
 
 /// Centralized Service Locator for M.I.R.N POWER Management System.
 /// Decoupled from third-party vendor SDKs to ensure clean dependency inversion.
@@ -26,6 +28,7 @@ class ServiceLocator {
   ServiceLocator._();
   static final ServiceLocator instance = ServiceLocator._();
 
+  late AuthRepository authRepository;
   late ProductRepository productRepository;
   late ContactRepository contactRepository;
   late SaleRepository saleRepository;
@@ -43,6 +46,7 @@ class ServiceLocator {
   bool get isInitialized => _isInitialized;
 
   void initialize({
+    AuthRepository? customAuthRepository,
     ProductRepository? customProductRepository,
     ContactRepository? customContactRepository,
     SaleRepository? customSaleRepository,
@@ -54,6 +58,7 @@ class ServiceLocator {
     List<Contact>? initialContacts,
     List<CheckRecord>? initialChecks,
   }) {
+    authRepository = customAuthRepository ?? InMemoryAuthRepository();
     productRepository = customProductRepository ??
         InMemoryProductRepository(initialProducts: initialProducts);
     contactRepository = customContactRepository ??
@@ -93,6 +98,9 @@ class ServiceLocator {
   }
 
   void dispose() {
+    if (authRepository is InMemoryAuthRepository) {
+      (authRepository as InMemoryAuthRepository).dispose();
+    }
     if (productRepository is InMemoryProductRepository) {
       (productRepository as InMemoryProductRepository).dispose();
     }
