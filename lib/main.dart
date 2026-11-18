@@ -1563,13 +1563,261 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
     );
   }
 
+  void _showAddCheckDialog(BuildContext context) {
+    final checkNumberCtrl = TextEditingController();
+    final bankNameCtrl = TextEditingController(text: 'בנק הפועלים (12)');
+    final branchCtrl = TextEditingController(text: '680');
+    final accountCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    final partyNameCtrl = TextEditingController(text: _contacts.first.name);
+    DateTime dueDate = DateTime.now().add(const Duration(days: 30));
+    CheckType checkType = CheckType.received;
+    String selectedPartyId = _contacts.first.id;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(AppColorValues.cardDark),
+              title: Row(
+                children: const [
+                  Icon(Icons.add_card, color: Color(AppColorValues.primaryGold)),
+                  SizedBox(width: 8),
+                  Text('تسجيل شيك بنكي جديد / הוספת שיק', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<CheckType>(
+                              title: const Text('شيك وارد (من عميل)', style: TextStyle(fontSize: 12)),
+                              value: CheckType.received,
+                              groupValue: checkType,
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => checkType = val);
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<CheckType>(
+                              title: const Text('شيك صادر (لمورد)', style: TextStyle(fontSize: 12)),
+                              value: CheckType.issued,
+                              groupValue: checkType,
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => checkType = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: checkNumberCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم الشيك / מספר שיק *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: amountCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'المبلغ (₪) / סכום *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: bankNameCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'اسم البنك / שם הבנק *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: branchCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'الفرع / סניף',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: accountCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الحساب / מספר חשבון',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedPartyId,
+                        decoration: const InputDecoration(
+                          labelText: 'الطرف المعني / לקוח או ספק *',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _contacts.map((c) {
+                          return DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name.split(' / ').first, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedPartyId = val;
+                              partyNameCtrl.text = _contacts.firstWhere((c) => c.id == val).name;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      ListTile(
+                        tileColor: Colors.black12,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        dense: true,
+                        title: const Text('تاريخ الاستحقاق / תאריך פירעון'),
+                        subtitle: Text('${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}'),
+                        trailing: const Icon(Icons.calendar_today, size: 18),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: dueDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => dueDate = picked);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء / ביטול'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColorValues.primaryGold),
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('حفظ الشيك / שמור'),
+                  onPressed: () async {
+                    final numStr = checkNumberCtrl.text.trim();
+                    final amt = double.tryParse(amountCtrl.text.trim());
+                    if (numStr.isEmpty || amt == null || amt <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('يرجى إدخال رقم شيك صحيح ومبلغ إيجابي')),
+                      );
+                      return;
+                    }
+
+                    final newCheck = CheckRecord(
+                      id: 'chk-${DateTime.now().millisecondsSinceEpoch}',
+                      checkNumber: numStr,
+                      bankName: bankNameCtrl.text.trim(),
+                      branchNumber: branchCtrl.text.trim().isEmpty ? '001' : branchCtrl.text.trim(),
+                      accountNumber: accountCtrl.text.trim().isEmpty ? '000000' : accountCtrl.text.trim(),
+                      amount: amt,
+                      dueDate: dueDate,
+                      type: checkType,
+                      partyId: selectedPartyId,
+                      partyName: partyNameCtrl.text,
+                      relatedTransactionId: 'MANUAL-${DateTime.now().millisecondsSinceEpoch}',
+                      status: CheckStatus.pending,
+                      history: [
+                        CheckHistoryEntry(
+                          status: CheckStatus.pending,
+                          changedAt: DateTime.now(),
+                          notes: 'تسجيل يدوي في حافظة الشيكات',
+                          changedBy: _currentUser?.name.split(' / ').first ?? 'Admin',
+                        ),
+                      ],
+                      createdAt: DateTime.now(),
+                    );
+
+                    _checksController.addCheck(newCheck);
+                    if (ServiceLocator.instance.isInitialized) {
+                      await ServiceLocator.instance.checkRepository.saveCheck(newCheck);
+                    }
+
+                    Navigator.of(ctx).pop();
+                    setState(() {});
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('تم إضافة الشيك رقم $numStr بنجاح إلى الحافظة')),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildChecksScreen() {
     final checks = _checksController.filteredChecks;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildSectionHeader('سجل الشيكات البنكية وحركات المقاصة / קופת שיקים'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: _buildSectionHeader('سجل الشيكات البنكية وحركات المقاصة / קופת שיקים'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(AppColorValues.primaryGold),
+                foregroundColor: Colors.black,
+              ),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('إضافة شيك جديد / הוסף שיק'),
+              onPressed: () => _showAddCheckDialog(context),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         ...checks.map((c) {
           Color statusColor;
