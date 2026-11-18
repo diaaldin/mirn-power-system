@@ -41,20 +41,19 @@ class DefaultFirebaseOptions {
     measurementId: 'G-P7KZ1QQXK0',
   );
 
-  // Android Firebase Options
-  // Note: uses standard Google Services configuration for Android.
+  // Android Firebase Options (com.mirn.powersystem)
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
-    appId: '1:567114559597:android:8908dad67f7f10be854f64',
+    apiKey: 'AIzaSyDvpTK6enathn_LgHP3mLmjSalxm13uV8k',
+    appId: '1:567114559597:android:7392845aa78d49f2854f64',
     messagingSenderId: '567114559597',
     projectId: 'mirn-power-system',
     storageBucket: 'mirn-power-system.firebasestorage.app',
   );
 
-  // iOS Firebase Options
+  // iOS Firebase Options (com.mirn.powersystem)
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
-    appId: '1:567114559597:ios:8908dad67f7f10be854f64',
+    apiKey: 'AIzaSyB1pX5VDtIS8X_Max97SrMzZvKXCpA9EHM',
+    appId: '1:567114559597:ios:043b05f7614103ac854f64',
     messagingSenderId: '567114559597',
     projectId: 'mirn-power-system',
     storageBucket: 'mirn-power-system.firebasestorage.app',

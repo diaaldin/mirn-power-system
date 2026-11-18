@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "567114559597",
+    "project_id": "mirn-power-system",
+    "storage_bucket": "mirn-power-system.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:567114559597:android:7392845aa78d49f2854f64",
+        "android_client_info": {
+          "package_name": "com.mirn.powersystem"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvpTK6enathn_LgHP3mLmjSalxm13uV8k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
