@@ -17,7 +17,11 @@ class DefaultFirebaseOptions {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
+      case TargetPlatform.iOS:
+        return ios;
       case TargetPlatform.windows:
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
         return windows;
       default:
         throw UnsupportedError(
@@ -26,32 +30,45 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // Web Firebase Options
+  // Web Firebase Options (Live Production)
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSy_YOUR_WEB_API_KEY_HERE',
-    appId: '1:000000000000:web:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: projectId,
-    authDomain: '$projectId.firebaseapp.com',
-    storageBucket: '$projectId.firebasestorage.app',
+    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
+    appId: '1:567114559597:web:8908dad67f7f10be854f64',
+    messagingSenderId: '567114559597',
+    projectId: 'mirn-power-system',
+    authDomain: 'mirn-power-system.firebaseapp.com',
+    storageBucket: 'mirn-power-system.firebasestorage.app',
+    measurementId: 'G-P7KZ1QQXK0',
   );
 
   // Android Firebase Options
+  // Note: uses standard Google Services configuration for Android.
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSy_YOUR_ANDROID_API_KEY_HERE',
-    appId: '1:000000000000:android:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: projectId,
-    storageBucket: '$projectId.firebasestorage.app',
+    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
+    appId: '1:567114559597:android:8908dad67f7f10be854f64',
+    messagingSenderId: '567114559597',
+    projectId: 'mirn-power-system',
+    storageBucket: 'mirn-power-system.firebasestorage.app',
+  );
+
+  // iOS Firebase Options
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
+    appId: '1:567114559597:ios:8908dad67f7f10be854f64',
+    messagingSenderId: '567114559597',
+    projectId: 'mirn-power-system',
+    storageBucket: 'mirn-power-system.firebasestorage.app',
+    iosBundleId: 'com.mirn.powersystem',
   );
 
   // Windows / Desktop Firebase Options
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSy_YOUR_WINDOWS_API_KEY_HERE',
-    appId: '1:000000000000:web:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: projectId,
-    authDomain: '$projectId.firebaseapp.com',
-    storageBucket: '$projectId.firebasestorage.app',
+    apiKey: 'AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU',
+    appId: '1:567114559597:web:8908dad67f7f10be854f64',
+    messagingSenderId: '567114559597',
+    projectId: 'mirn-power-system',
+    authDomain: 'mirn-power-system.firebaseapp.com',
+    storageBucket: 'mirn-power-system.firebasestorage.app',
+    measurementId: 'G-P7KZ1QQXK0',
   );
 }
