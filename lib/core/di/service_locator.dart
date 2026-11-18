@@ -21,7 +21,7 @@ import '../../features/accounts/domain/models/contact.dart';
 import '../../features/checks/domain/models/check_record.dart';
 
 /// Centralized Service Locator for M.I.R.N POWER Management System.
-/// Provides reactive repositories and atomic transaction orchestrators.
+/// Decoupled from third-party vendor SDKs to ensure clean dependency inversion.
 class ServiceLocator {
   ServiceLocator._();
   static final ServiceLocator instance = ServiceLocator._();
@@ -43,48 +43,50 @@ class ServiceLocator {
   bool get isInitialized => _isInitialized;
 
   void initialize({
+    ProductRepository? customProductRepository,
+    ContactRepository? customContactRepository,
+    SaleRepository? customSaleRepository,
+    CheckRepository? customCheckRepository,
+    PurchaseRepository? customPurchaseRepository,
+    DispatchRepository? customDispatchRepository,
+    ExpenseRepository? customExpenseRepository,
     List<Product>? initialProducts,
     List<Contact>? initialContacts,
     List<CheckRecord>? initialChecks,
   }) {
-    final prodRepo = InMemoryProductRepository(initialProducts: initialProducts);
-    final contRepo = InMemoryContactRepository(initialContacts: initialContacts);
-    final saleRepo = InMemorySaleRepository();
-    final chkRepo = InMemoryCheckRepository(initialChecks: initialChecks);
-    final purchRepo = InMemoryPurchaseRepository();
-    final dispRepo = InMemoryDispatchRepository();
-    final expRepo = InMemoryExpenseRepository();
-
-    productRepository = prodRepo;
-    contactRepository = contRepo;
-    saleRepository = saleRepo;
-    checkRepository = chkRepo;
-    purchaseRepository = purchRepo;
-    dispatchRepository = dispRepo;
-    expenseRepository = expRepo;
+    productRepository = customProductRepository ??
+        InMemoryProductRepository(initialProducts: initialProducts);
+    contactRepository = customContactRepository ??
+        InMemoryContactRepository(initialContacts: initialContacts);
+    saleRepository = customSaleRepository ?? InMemorySaleRepository();
+    checkRepository = customCheckRepository ??
+        InMemoryCheckRepository(initialChecks: initialChecks);
+    purchaseRepository = customPurchaseRepository ?? InMemoryPurchaseRepository();
+    dispatchRepository = customDispatchRepository ?? InMemoryDispatchRepository();
+    expenseRepository = customExpenseRepository ?? InMemoryExpenseRepository();
 
     saleOrchestrator = SaleTransactionOrchestrator(
-      productRepository: prodRepo,
-      contactRepository: contRepo,
-      saleRepository: saleRepo,
-      checkRepository: chkRepo,
+      productRepository: productRepository,
+      contactRepository: contactRepository,
+      saleRepository: saleRepository,
+      checkRepository: checkRepository,
     );
 
     purchaseOrchestrator = PurchaseTransactionOrchestrator(
-      productRepository: prodRepo,
-      contactRepository: contRepo,
-      purchaseRepository: purchRepo,
+      productRepository: productRepository,
+      contactRepository: contactRepository,
+      purchaseRepository: purchaseRepository,
     );
 
     creditNoteOrchestrator = CreditNoteTransactionOrchestrator(
-      productRepository: prodRepo,
-      contactRepository: contRepo,
-      saleRepository: saleRepo,
+      productRepository: productRepository,
+      contactRepository: contactRepository,
+      saleRepository: saleRepository,
     );
 
     checkLifecycleOrchestrator = CheckLifecycleOrchestrator(
-      checkRepository: chkRepo,
-      contactRepository: contRepo,
+      checkRepository: checkRepository,
+      contactRepository: contactRepository,
     );
 
     _isInitialized = true;
