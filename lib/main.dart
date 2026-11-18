@@ -32,10 +32,23 @@ import 'features/purchases/presentation/controllers/purchases_controller.dart';
 import 'features/receipts/domain/models/payment_receipt.dart';
 import 'features/receipts/domain/services/receipt_service.dart';
 import 'features/sales/domain/models/payment_split.dart';
-import 'features/sales/presentation/screens/sales_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'core/di/firestore_service_locator.dart';
 import 'features/returns/domain/models/credit_note.dart';
+import 'features/sales/presentation/screens/sales_screen.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    setupFirestoreRepositories();
+    debugPrint('Firebase & Cloud Firestore initialized successfully for project mirn-power-system');
+  } catch (e) {
+    debugPrint('Running in standalone mode (Firebase initialization skipped: $e)');
+  }
   runApp(const MirnPowerApp());
 }
 
