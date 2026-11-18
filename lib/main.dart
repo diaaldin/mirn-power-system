@@ -541,6 +541,30 @@ class _MirnPowerAppState extends State<MirnPowerApp> {
       drivers: _drivers,
       nextExpenseSeq: 5,
     );
+
+    _syncFromCloudDatabase();
+  }
+
+  Future<void> _syncFromCloudDatabase() async {
+    if (!ServiceLocator.instance.isInitialized) return;
+    try {
+      final cloudProducts = await ServiceLocator.instance.productRepository.getProducts();
+      final cloudContacts = await ServiceLocator.instance.contactRepository.getContacts();
+      if (mounted && (cloudProducts.isNotEmpty || cloudContacts.isNotEmpty)) {
+        setState(() {
+          if (cloudProducts.isNotEmpty) {
+            _products.clear();
+            _products.addAll(cloudProducts);
+          }
+          if (cloudContacts.isNotEmpty) {
+            _contacts.clear();
+            _contacts.addAll(cloudContacts);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Cloud sync on startup skipped or offline: $e');
+    }
   }
 
   @override
