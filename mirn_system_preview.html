@@ -375,13 +375,35 @@
       const modal = document.getElementById('modalAddVehicle');
       if (modal) modal.classList.add('hidden');
     }
-    function submitAddVehicle() {
+    async function submitAddVehicle() {
       const name = document.getElementById('modalVehName')?.value.trim();
       const plate = document.getElementById('modalVehPlate')?.value.trim();
       if (!name || !plate) {
         alert('يرجى إدخال طراز الشاحنة ورقم اللوحة');
         return;
       }
+
+      await withAuth(async (db) => {
+        const docRef = db.collection('vehicles').doc();
+        await docRef.set({
+          id: docRef.id, name, plateNumber: plate, odometer: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Add to dispatch and expense truck dropdowns
+        const dispTruck = document.getElementById('modalDispTruck');
+        if (dispTruck) {
+          const opt = new Option(name + ' [' + plate + ']', docRef.id);
+          dispTruck.add(opt);
+        }
+        const expTruck = document.getElementById('modalExpVehicle');
+        if (expTruck) {
+          const opt = new Option(name + ' [' + plate + ']', docRef.id);
+          opt.setAttribute('data-odo', '0');
+          expTruck.add(opt);
+        }
+      });
+
       closeAddVehicleModal();
       showToast('🚚 تمت إضافة الشاحنة ' + plate + ' (' + name + ') بنجاح إلى أسطول النقل!');
     }
@@ -2703,15 +2725,20 @@
       renderDispatches();
     }
 
-    function advanceDispatchStatus(id, newStatus) {
+    async function advanceDispatchStatus(id, newStatus) {
       const dispatch = dispatchesData.find(d => d.id === id);
       if (!dispatch) return;
       dispatch.status = newStatus;
+
+      await withAuth(async (db) => {
+        await db.collection('dispatches').doc(id).update({ status: newStatus });
+      });
+
       renderDispatches();
       if (newStatus === 'dispatched') {
-        alert(`🚚 تم بدء نقل الإرسالية ${dispatch.dispatchNumber} بنجاح!\nالشاحنة في طريقها إلى ${dispatch.deliveryAddress}`);
+        showToast(`🚚 تم بدء نقل الإرسالية ${dispatch.dispatchNumber} بنجاح!`);
       } else if (newStatus === 'cancelled') {
-        alert(`✕ تم إلغاء أمر الإرسالية ${dispatch.dispatchNumber}.`);
+        showToast(`✕ تم إلغاء أمر الإرسالية ${dispatch.dispatchNumber}.`);
       }
     }
 
@@ -2734,7 +2761,7 @@
       completingDispatchId = null;
     }
 
-    function confirmCompleteDelivery() {
+    async function confirmCompleteDelivery() {
       if (!completingDispatchId) return;
       const d = dispatchesData.find(item => item.id === completingDispatchId);
       if (!d) return;
@@ -2749,6 +2776,14 @@
 
       d.status = 'delivered';
 
+      await withAuth(async (db) => {
+        await db.collection('dispatches').doc(d.id).update({
+          status: 'delivered',
+          completedOdometer: newOdo,
+          completedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+
       // Update truck odo display
       const truckOdoEl = document.getElementById('truckOdo-' + d.vehicleId);
       if (truckOdoEl) truckOdoEl.textContent = newOdo.toLocaleString() + ' كم';
@@ -2756,7 +2791,7 @@
       closeCompleteDeliveryModal();
       renderDispatches();
 
-      alert(`✓ تم تأكيد تسليم الإرسالية ${d.dispatchNumber} بنجاح!\n- تم تحديث عداد الشاحنة إلى ${newOdo.toLocaleString()} كم (+${newOdo - currentOdo} كم رحلة).\n- تم إغلاق دورة الإرسالية.`);
+      showToast(`✅ تم تأكيد تسليم الإرسالية ${d.dispatchNumber}! العداد: ${newOdo.toLocaleString()} كم`);
     }
 
     function openNewDispatchModal() {
@@ -2769,7 +2804,7 @@
       document.getElementById('dispatchModal').classList.add('hidden');
     }
 
-    function submitNewDispatch() {
+    async function submitNewDispatch() {
       const dispNum = document.getElementById('modalDispNumber').value || 'DSP-2026-00004';
       const custSelect = document.getElementById('modalDispCustomer');
       const custName = custSelect.options[custSelect.selectedIndex].text;
@@ -2809,11 +2844,15 @@
         notes: notes || null
       };
 
+      await withAuth(async (db) => {
+        await db.collection('dispatches').doc(newDispatch.id).set(newDispatch);
+      });
+
       dispatchesData.unshift(newDispatch);
       closeNewDispatchModal();
       renderDispatches();
 
-      alert(`✓ تم إنشاء أمر الإرسالية ${dispNum} بنجاح!\n- الحالة الأولية: مُعلّق بالانتظار (ממתין)\n- تم حجز الشاحنة ${truckName}\n- يمكنك الآن معاينة وطباعة سند الإرسالية A4 PDF`);
+      showToast(`✅ تم إنشاء أمر الإرسالية ${dispNum} بنجاح!`);
     }
 
     function openDeliveryNotePdfPreview(id) {
@@ -2837,8 +2876,7 @@
     }
 
     function printDeliveryNote() {
-      alert('✓ تم إرسال سند الإرسالية الرسمية A4 إلى طابعة المستندات.');
-      closeDeliveryNotePdfModal();
+      window.print();
     }
 
     // --- FLEET SUB-TAB & EXPENSES LOGIC ---
@@ -3107,7 +3145,7 @@
       }
     }
 
-    function submitNewExpense() {
+    async function submitNewExpense() {
       const expNum = document.getElementById('modalExpNumber').value;
       const date = document.getElementById('modalExpDate').value;
       const category = document.getElementById('modalExpCategory').value;
@@ -3163,11 +3201,15 @@
         reference: ref
       };
 
+      await withAuth(async (db) => {
+        await db.collection('expenses').doc(newExpense.id).set(newExpense);
+      });
+
       expensesData.unshift(newExpense);
       closeNewExpenseModal();
       renderExpenses();
 
-      alert(`✓ تم تسجيل سند الصرف ${expNum} بمبلغ ₪${amount.toLocaleString()} بنجاح!\n- التصنيف: ${categoryLabels[category].ar}\n- تم تحديث مؤشرات التكلفة لكل كيلومتر.\n- يمكنك الآن معاينة وطباعة سند الصرف الرسمي A4 PDF.`);
+      showToast(`✅ تم تسجيل سند الصرف ${expNum} بمبلغ ₪${amount.toLocaleString()} بنجاح!`);
     }
 
     function openExpenseVoucherPdfPreview(id) {
@@ -3199,8 +3241,7 @@
     }
 
     function printExpenseVoucher() {
-      alert('✓ تم إرسال سند الصرف والمصروفات الرسمي A4 إلى طابعة المستندات.');
-      closeExpenseVoucherPdfModal();
+      window.print();
     }
 
     // Init
@@ -3700,7 +3741,7 @@
   </div>
 
   <!-- Simulated Delivery Note A4 PDF Preview Modal -->
-  <div id="deliveryNotePdfModal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+  <div id="deliveryNotePdfModal" class="pdf-preview-modal hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
     <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
         <div class="flex items-center gap-2">
@@ -3714,7 +3755,7 @@
       </div>
 
       <!-- Simulated Paper A4 Document -->
-      <div class="bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+      <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
         <!-- Document Header Banner -->
         <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
           <div>
@@ -3916,7 +3957,7 @@
   </div>
 
   <!-- Simulated Expense Voucher A4 PDF Preview Modal -->
-  <div id="expenseVoucherPdfModal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+  <div id="expenseVoucherPdfModal" class="pdf-preview-modal hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
     <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
         <div class="flex items-center gap-2">
@@ -3930,7 +3971,7 @@
       </div>
 
       <!-- Simulated Paper A4 Document -->
-      <div class="bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+      <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
         <!-- Document Header Banner -->
         <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
           <div>
