@@ -100,15 +100,48 @@
       const modal = document.getElementById('modalAddContact');
       if (modal) modal.classList.add('hidden');
     }
-    function submitAddContact() {
+    async function submitAddContact() {
       const name = document.getElementById('modalContactName')?.value.trim();
       const taxId = document.getElementById('modalContactTaxId')?.value.trim();
+      const type = document.getElementById('modalContactType')?.value || 'customer';
+      const phone = document.getElementById('modalContactPhone')?.value.trim() || '';
+      const address = document.getElementById('modalContactAddress')?.value.trim() || '';
       if (!name || !taxId) {
         alert('يرجى إدخال اسم جهة الاتصال والرقم الضريبي (ח.פ)');
         return;
       }
+
+      await withAuth(async (db) => {
+        const docRef = db.collection('contacts').doc();
+        const contact = { id: docRef.id, name, taxId, type, currentBalance: 0, debtWarningLimit: 50000, phone, address };
+        await docRef.set(contact);
+        window.contactsCache.set(docRef.id, contact);
+
+        // Add to all relevant dropdowns
+        if (type === 'customer' || type === 'both') {
+          ['customerSelect', 'modalDispCustomer'].forEach(selId => {
+            const sel = document.getElementById(selId);
+            if (sel) {
+              const opt = new Option(name + ' (رصيد: ₪0.00)', docRef.id);
+              opt.setAttribute('data-balance', '0');
+              opt.setAttribute('data-limit', '50000');
+              opt.setAttribute('data-name', name);
+              sel.add(opt);
+            }
+          });
+        }
+        if (type === 'supplier' || type === 'both') {
+          const suppSel = document.getElementById('modalPurchaseSupplier');
+          if (suppSel) {
+            const opt = new Option(name, docRef.id);
+            opt.setAttribute('data-name', name);
+            opt.setAttribute('data-balance', '0');
+            suppSel.add(opt);
+          }
+        }
+      });
       closeAddContactModal();
-      showToast('✅ تمت إضافة جهة الاتصال: ' + name + ' (رقم ضريبي: ' + taxId + ') بنجاح!');
+      showToast('✅ تمت إضافة جهة الاتصال: ' + name + ' بنجاح!');
     }
 
     // --- CREDIT NOTE MODAL LOGIC ---
@@ -127,13 +160,73 @@
       document.getElementById('modalCrnTaxAmount').value = tax.toFixed(2);
       document.getElementById('modalCrnTotalVal').textContent = '₪ ' + total.toLocaleString('en-US', {minimumFractionDigits: 2});
     }
-    function submitCreditNote() {
+    async function submitCreditNote() {
       const beforeTax = parseFloat(document.getElementById('modalCrnAmountBeforeTax')?.value) || 0;
       if (beforeTax <= 0) {
         alert('يرجى تحديد قيمة المردود المالي');
         return;
       }
       const total = beforeTax * 1.17;
+      const reason = document.getElementById('modalCrnReason')?.value || 'إرجاع بضاعة';
+      const prodSelect = document.getElementById('modalCrnProduct') || document.getElementById('prodSelect');
+      const prodId = prodSelect?.value;
+      const custSelect = document.getElementById('customerSelect');
+      const custId = custSelect?.value;
+
+      await withAuth(async (db) => {
+        const docRef = db.collection('credit_notes').doc();
+        const creditNote = {
+          id: docRef.id,
+          date: new Date().toISOString().split('T')[0],
+          customerId: custId || null,
+          customerName: custSelect ? custSelect.options[custSelect.selectedIndex]?.text : '',
+          productId: prodId || null,
+          amountBeforeTax: beforeTax,
+          tax: beforeTax * 0.17,
+          total: total,
+          reason: reason,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await docRef.set(creditNote);
+
+        // Update product stock (increment)
+        if (prodId) {
+          const qtyReturn = parseFloat(document.getElementById('modalCrnQty')?.value) || 1;
+          await db.collection('products').doc(prodId).update({
+            currentStock: firebase.firestore.FieldValue.increment(qtyReturn)
+          });
+          const cached = window.productsCache.get(prodId);
+          if (cached) cached.currentStock = (cached.currentStock || 0) + qtyReturn;
+        }
+
+        // Update customer balance (decrement debt)
+        if (custId) {
+          await db.collection('contacts').doc(custId).update({
+            currentBalance: firebase.firestore.FieldValue.increment(-total)
+          });
+          const cached = window.contactsCache.get(custId);
+          if (cached) cached.currentBalance = (cached.currentBalance || 0) - total;
+        }
+
+        // Add row to statement table
+        const tbody = document.querySelector('#view-statements tbody');
+        if (tbody) {
+          const tr = document.createElement('tr');
+          tr.className = 'bg-blue-500/10 font-bold';
+          const newBal = custId && window.contactsCache.get(custId) ? window.contactsCache.get(custId).currentBalance : 0;
+          tr.innerHTML = `
+            <td class="py-2.5 px-3 font-mono text-gray-300">اليوم</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059]">${docRef.id.substring(0,12)}</td>
+            <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">إشعار دائن</span></td>
+            <td class="py-2.5 px-3">إشعار دائن (זיכוי) - ${reason}</td>
+            <td class="py-2.5 px-3 font-mono text-gray-500">-</td>
+            <td class="py-2.5 px-3 font-mono text-blue-400">₪ ${total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059]">₪ ${newBal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      });
+
       closeCreditNoteModal();
       showToast('✅ تم إصدار إشعار دائن (זיכוי) بقيمة ₪' + total.toFixed(2) + ' واستعادة البضاعة وتعديل الذمم!');
     }
@@ -1746,8 +1839,124 @@
       }
     }
 
-    function processSale() {
-      alert('✓ تم إصدار الفاتورة بنجاح!\n- تم خصم الكميات من المستودع.\n- تم ترحيل الشيك إلى قيد الانتظار في سجل الشيكات.\n- تم تحديث رصيد ذمة الزبون في كشف الحساب.');
+    async function processSale() {
+      const custSelect = document.getElementById('customerSelect');
+      const custId = custSelect?.value;
+      const custName = custSelect ? custSelect.options[custSelect.selectedIndex]?.getAttribute('data-name') || custSelect.options[custSelect.selectedIndex]?.text : '';
+
+      // Build line items from POS rows
+      const rows = document.querySelectorAll('#posItemsContainer .pos-item-row, #posItemsContainer [data-pos-row]');
+      const items = [];
+      const prodSelect = document.getElementById('prodSelect');
+      // Gather totals from DOM
+      const subtotalEl = document.getElementById('posSubtotal');
+      const vatEl = document.getElementById('posVat');
+      const totalEl = document.getElementById('posGrandTotal');
+      const payDebt = parseFloat(document.getElementById('payDebt')?.value) || 0;
+      const payCash = parseFloat(document.getElementById('payCash')?.value) || 0;
+      const payCheck = parseFloat(document.getElementById('payCheck')?.value) || 0;
+      const checkNum = document.getElementById('payCheckNumber')?.value || '';
+      const checkBank = document.getElementById('payCheckBank')?.value || '';
+
+      const subtotal = parseFloat(subtotalEl?.textContent?.replace(/[^\d.-]/g, '')) || 0;
+      const vat = parseFloat(vatEl?.textContent?.replace(/[^\d.-]/g, '')) || 0;
+      const grandTotal = parseFloat(totalEl?.textContent?.replace(/[^\d.-]/g, '')) || 0;
+
+      if (grandTotal <= 0) {
+        alert('يرجى إضافة أصناف للفاتورة');
+        return;
+      }
+
+      await withAuth(async (db) => {
+        const saleRef = db.collection('sales').doc();
+        const sale = {
+          id: saleRef.id,
+          invoiceNumber: 'INV-' + Date.now(),
+          date: new Date().toISOString().split('T')[0],
+          customerId: custId || null,
+          customerName: custName,
+          subtotal: subtotal,
+          vat: vat,
+          total: grandTotal,
+          payDebt: payDebt,
+          payCash: payCash,
+          payCheck: payCheck,
+          checkNumber: checkNum || null,
+          checkBank: checkBank || null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await saleRef.set(sale);
+
+        // Update customer balance (increment by debt amount)
+        if (custId && payDebt > 0) {
+          await db.collection('contacts').doc(custId).update({
+            currentBalance: firebase.firestore.FieldValue.increment(payDebt)
+          });
+          const cached = window.contactsCache.get(custId);
+          if (cached) cached.currentBalance = (cached.currentBalance || 0) + payDebt;
+        }
+
+        // Add row to statement table
+        const tbody = document.querySelector('#view-statements tbody');
+        if (tbody && payDebt > 0) {
+          const tr = document.createElement('tr');
+          tr.className = 'bg-red-500/10 font-bold';
+          const newBal = custId && window.contactsCache.get(custId) ? window.contactsCache.get(custId).currentBalance : 0;
+          tr.innerHTML = `
+            <td class="py-2.5 px-3 font-mono text-gray-300">اليوم</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059]">${sale.invoiceNumber}</td>
+            <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300">فاتورة بيع</span></td>
+            <td class="py-2.5 px-3">فاتورة بيع مع ذمة على الحساب</td>
+            <td class="py-2.5 px-3 font-mono text-red-400">₪ ${payDebt.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="py-2.5 px-3 font-mono text-gray-500">-</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059]">₪ ${newBal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        // Add check to checks list if check payment
+        if (payCheck > 0 && checkNum) {
+          const checkRef = db.collection('checks').doc();
+          const checkDoc = {
+            id: checkRef.id,
+            checkNumber: checkNum,
+            amount: payCheck,
+            bank: checkBank,
+            branch: '',
+            account: '',
+            party: custName,
+            dueDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
+            type: 'received',
+            status: 'pending',
+            sourceInvoice: sale.invoiceNumber,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          await checkRef.set(checkDoc);
+          window.checksCache.push(checkDoc);
+
+          const checksList = document.getElementById('checksList');
+          if (checksList) {
+            const chkDiv = document.createElement('div');
+            chkDiv.className = 'bg-[#25252D] border border-green-500/40 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs';
+            chkDiv.innerHTML = `
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-white text-sm">شيك #${checkNum}</span>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">PENDING (من فاتورة ${sale.invoiceNumber})</span>
+                </div>
+                <p class="text-gray-400 mt-1">${checkBank} | الساحب: ${custName}</p>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="font-mono text-base font-bold text-[#C5A059]">₪ ${payCheck.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                <button onclick="previewCheckPdf('${checkRef.id}')" class="px-3 py-1.5 rounded-lg border border-[#C5A059] text-[#C5A059] hover:bg-[#C5A059]/10 font-bold flex items-center gap-1">📄 معاينة</button>
+              </div>
+            `;
+            checksList.prepend(chkDiv);
+          }
+        }
+      });
+
+      showToast('✅ تم إصدار الفاتورة بنجاح! تم خصم الكميات وترحيل الذمم.');
     }
 
     function openReceiptModal() {
