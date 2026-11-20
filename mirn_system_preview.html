@@ -4087,6 +4087,17 @@
           <label class="block text-gray-400 mb-1">تاريخ الاستحقاق / תאריך פירעון *</label>
           <input type="date" id="modalCheckDueDateInput" class="w-full bg-[#25252D] border border-[#33333E] rounded-xl px-3 py-2 text-white font-mono outline-none">
         </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-gray-400 mb-1">صورة الشيك / תמונת השיק</label>
+            <input type="file" id="modalCheckImage" accept="image/*" class="w-full bg-[#25252D] border border-[#33333E] rounded-xl px-3 py-2 text-white text-xs outline-none file:bg-[#C5A059] file:text-black file:border-0 file:rounded-lg file:px-3 file:py-1 file:text-xs file:font-bold">
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1">صورة هوية الساحب / תעודת זהות</label>
+            <input type="file" id="modalCheckIdImage" accept="image/*" class="w-full bg-[#25252D] border border-[#33333E] rounded-xl px-3 py-2 text-white text-xs outline-none file:bg-[#C5A059] file:text-black file:border-0 file:rounded-lg file:px-3 file:py-1 file:text-xs file:font-bold">
+          </div>
+        </div>
       </div>
 
       <div class="flex justify-end gap-2 pt-2 border-t border-[#33333E]">
@@ -4105,6 +4116,11 @@
       const defDate = today.toISOString().split('T')[0];
       const dateEl = document.getElementById('modalCheckDueDateInput');
       if (dateEl) dateEl.value = defDate;
+      // Reset file inputs
+      const imgInput = document.getElementById('modalCheckImage');
+      const idInput = document.getElementById('modalCheckIdImage');
+      if (imgInput) imgInput.value = '';
+      if (idInput) idInput.value = '';
       const modal = document.getElementById('modalAddCheck');
       if (modal) modal.classList.remove('hidden');
     }
@@ -4114,7 +4130,17 @@
       if (modal) modal.classList.add('hidden');
     }
 
-    function submitNewCheck() {
+    function readFileAsBase64(fileInput) {
+      return new Promise((resolve) => {
+        if (!fileInput || !fileInput.files || !fileInput.files[0]) { resolve(null); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(fileInput.files[0]);
+      });
+    }
+
+    async function submitNewCheck() {
       const num = document.getElementById('modalCheckNumInput')?.value.trim();
       const amtStr = document.getElementById('modalCheckAmountInput')?.value;
       const bank = document.getElementById('modalCheckBankInput')?.value;
@@ -4130,6 +4156,26 @@
       }
 
       const amt = parseFloat(amtStr);
+
+      // Read images as base64
+      const checkImageBase64 = await readFileAsBase64(document.getElementById('modalCheckImage'));
+      const idImageBase64 = await readFileAsBase64(document.getElementById('modalCheckIdImage'));
+
+      let checkDocId = '';
+      await withAuth(async (db) => {
+        const checkRef = db.collection('checks').doc();
+        checkDocId = checkRef.id;
+        const checkDoc = {
+          id: checkRef.id, checkNumber: num, amount: amt, bank, branch, account: acc,
+          party, dueDate, type, status: 'pending',
+          checkImageBase64: checkImageBase64 || null,
+          idImageBase64: idImageBase64 || null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await checkRef.set(checkDoc);
+        window.checksCache.push(checkDoc);
+      });
+
       const list = document.getElementById('checksList');
       if (list) {
         const checkCard = document.createElement('div');
@@ -4146,7 +4192,7 @@
           </div>
           <div class="flex items-center gap-4">
             <span class="font-mono text-base font-bold text-[#C5A059]">₪ ${amt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-            <button onclick="alert('تم تحويل حالة الشيك #${num} إلى: مودع بالبنك (DEPOSITED)')" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium">إيداع بالبنك</button>
+            <button onclick="previewCheckPdf('${checkDocId}')" class="px-3 py-1.5 rounded-lg border border-[#C5A059] text-[#C5A059] hover:bg-[#C5A059]/10 font-bold flex items-center gap-1">📄 معاينة</button>
           </div>
         `;
         list.prepend(checkCard);
@@ -4154,6 +4200,88 @@
 
       closeAddCheckModal();
       showToast('✅ تم تسجيل الشيك رقم #' + num + ' بمبلغ ₪' + amt.toLocaleString() + ' بنجاح في الحافظة!');
+    }
+
+    function previewCheckPdf(checkId) {
+      const ch = window.checksCache.find(c => c.id === checkId);
+      if (!ch) { alert('لم يتم العثور على بيانات الشيك'); return; }
+
+      let modal = document.getElementById('checkPdfModal');
+      if (modal) modal.remove();
+
+      const checkImgHtml = ch.checkImageBase64 ? `<div class="mt-2"><div class="text-gray-500 text-[10px] font-bold mb-1">صورة الشيك:</div><img src="${ch.checkImageBase64}" class="max-w-full max-h-48 rounded border border-gray-300"></div>` : '';
+      const idImgHtml = ch.idImageBase64 ? `<div class="mt-2"><div class="text-gray-500 text-[10px] font-bold mb-1">صورة هوية الساحب:</div><img src="${ch.idImageBase64}" class="max-w-full max-h-48 rounded border border-gray-300"></div>` : '';
+
+      modal = document.createElement('div');
+      modal.id = 'checkPdfModal';
+      modal.className = 'pdf-preview-modal fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🏦</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">معاينة شيك بنكي (A4 PDF)</h3>
+                <p class="text-[11px] text-[#C5A059]">צפייה בשיק בנקאי</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('checkPdfModal').remove()" class="text-gray-400 hover:text-white text-lg">✕</button>
+          </div>
+          <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+            <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
+              <div>
+                <h2 class="text-base font-bold text-black">M.I.R.N POWER Ltd.</h2>
+                <div class="text-[11px] text-gray-700 font-bold">חברת מ.י.ר.ן פאוור בע"מ</div>
+              </div>
+              <div class="text-left rtl:text-right space-y-1">
+                <div class="bg-[#1E1E24] text-white px-3 py-1 rounded font-bold text-xs">שיק / شيك بنكي</div>
+                <div class="font-mono font-bold text-sm text-[#9E7D3B]">#${ch.checkNumber || ch.num || ''}</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded border border-gray-200">
+              <div>
+                <div class="text-gray-500 text-[10px] font-bold">المبلغ</div>
+                <div class="text-xl font-bold font-mono text-amber-900">₪ ${(ch.amount || 0).toLocaleString('en-US', {minimumFractionDigits:2})}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 text-[10px] font-bold">تاريخ الاستحقاق</div>
+                <div class="font-mono font-bold text-gray-900">${ch.dueDate || ''}</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded border border-gray-200">
+              <div>
+                <div class="text-gray-500 text-[10px] font-bold">البنك / הבנק</div>
+                <div class="font-bold text-gray-900">${ch.bank || ''}</div>
+                <div class="text-gray-600 text-[11px]">فرع: ${ch.branch || ''} | حساب: ${ch.account || ''}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 text-[10px] font-bold">الطرف / הלקוח</div>
+                <div class="font-bold text-gray-900">${ch.party || ''}</div>
+                <div class="text-gray-600 text-[11px]">${ch.type === 'received' ? 'وارد من عميل' : 'صادر لمورد'}</div>
+              </div>
+            </div>
+            ${checkImgHtml}
+            ${idImgHtml}
+            <div class="pt-4 border-t border-gray-300 grid grid-cols-2 gap-4 text-center">
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">المدقق / מאשר</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">______________</div>
+              </div>
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">ختم الشركة / חותמת</div>
+                <div class="font-bold text-[#9E7D3B] text-[11px] mt-4">M.I.R.N POWER</div>
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-between items-center pt-2 border-t border-[#33333E]">
+            <button onclick="window.print()" class="px-5 py-2.5 rounded-xl font-bold bg-[#C5A059] hover:bg-[#D4AF37] text-black text-xs transition flex items-center gap-2 shadow-lg">
+              <span>🖨️</span> <span>طباعة الشيك</span>
+            </button>
+            <button onclick="document.getElementById('checkPdfModal').remove()" class="px-4 py-2.5 rounded-xl font-semibold bg-[#25252D] hover:bg-[#33333E] text-gray-300 text-xs transition">إغلاق</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
   </script>
 </body>
