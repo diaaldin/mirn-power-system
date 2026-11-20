@@ -2691,6 +2691,167 @@
     calculatePosTotals();
     renderDispatches();
     renderExpenses();
+
+    // --- FIRESTORE DATA LOADER ---
+    window.productsCache = new Map();
+    window.contactsCache = new Map();
+    window.checksCache = [];
+
+    async function loadFirestoreData() {
+      await withAuth(async (db) => {
+        // Load products
+        const prodSnap = await db.collection('products').get();
+        prodSnap.forEach(doc => {
+          const p = doc.data();
+          p.id = doc.id;
+          window.productsCache.set(doc.id, p);
+        });
+
+        // Rebuild inventory table from Firestore
+        if (window.productsCache.size > 0) {
+          const invBody = document.getElementById('inventoryTableBody');
+          if (invBody) {
+            invBody.innerHTML = '';
+            window.productsCache.forEach((p, id) => {
+              const unitLabel = p.unitType === 'piece' ? 'حبة' : 'م²';
+              const stock = p.currentStock || 0;
+              const statusClass = stock <= (p.minStockAlert || 0) ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300';
+              const statusText = stock <= (p.minStockAlert || 0) ? '⚠ منخفض' : '✓ وافر';
+              const tr = document.createElement('tr');
+              tr.id = 'row-' + id;
+              tr.innerHTML = `
+                <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">${p.sku || ''}</td>
+                <td class="py-2.5 px-3 text-white font-medium">${p.name || ''}</td>
+                <td class="py-2.5 px-3 font-mono stock-qty">${stock.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1})} ${unitLabel}</td>
+                <td class="py-2.5 px-3 font-mono cost-val">₪ ${(p.purchaseCost || 0).toFixed(2)}</td>
+                <td class="py-2.5 px-3 font-mono text-[#C5A059]">₪ ${(p.sellingPrice || 0).toFixed(2)}</td>
+                <td class="py-2.5 px-3 packing-info">${p.meterPerBox ? (stock / p.meterPerBox).toFixed(1) + ' كرتونة (' + p.meterPerBox + ' م²/كرتونة)' : '-'}</td>
+                <td class="py-2.5 px-3 status-cell"><span class="px-2 py-0.5 rounded ${statusClass} font-semibold flex items-center gap-1 w-max">${statusText}</span></td>
+              `;
+              invBody.appendChild(tr);
+            });
+          }
+
+          // Rebuild product dropdowns
+          const prodSelect = document.getElementById('prodSelect');
+          const modalPurchaseProduct = document.getElementById('modalPurchaseProduct');
+          if (prodSelect) {
+            const firstOpt = prodSelect.querySelector('option:first-child');
+            prodSelect.innerHTML = '';
+            if (firstOpt && firstOpt.value === '') prodSelect.appendChild(firstOpt);
+          }
+          window.productsCache.forEach((p, id) => {
+            if (prodSelect) {
+              const opt = document.createElement('option');
+              opt.value = id;
+              opt.textContent = p.name;
+              opt.setAttribute('data-price', p.sellingPrice || 0);
+              opt.setAttribute('data-unit', p.unitType || 'meter');
+              opt.setAttribute('data-stock', p.currentStock || 0);
+              prodSelect.appendChild(opt);
+            }
+            if (modalPurchaseProduct) {
+              const opt2 = document.createElement('option');
+              opt2.value = id;
+              opt2.textContent = p.name;
+              opt2.setAttribute('data-name', p.name);
+              opt2.setAttribute('data-factor', p.meterPerBox || 1.44);
+              opt2.setAttribute('data-unit', p.unitType || 'meter');
+              opt2.setAttribute('data-cost', p.purchaseCost || 0);
+              modalPurchaseProduct.appendChild(opt2);
+            }
+          });
+        }
+
+        // Load contacts
+        const contSnap = await db.collection('contacts').get();
+        contSnap.forEach(doc => {
+          const c = doc.data();
+          c.id = doc.id;
+          window.contactsCache.set(doc.id, c);
+        });
+
+        // Rebuild customer/supplier dropdowns
+        if (window.contactsCache.size > 0) {
+          const customerSelect = document.getElementById('customerSelect');
+          const modalDispCustomer = document.getElementById('modalDispCustomer');
+          const modalPurchaseSupplier = document.getElementById('modalPurchaseSupplier');
+
+          if (customerSelect) customerSelect.innerHTML = '';
+          if (modalDispCustomer) modalDispCustomer.innerHTML = '';
+          if (modalPurchaseSupplier) modalPurchaseSupplier.innerHTML = '';
+
+          window.contactsCache.forEach((c, id) => {
+            if (c.type === 'customer' || c.type === 'both') {
+              const balStr = '₪' + (c.currentBalance || 0).toLocaleString('en-US', {minimumFractionDigits:2});
+              if (customerSelect) {
+                const opt = new Option(c.name + ' (رصيد: ' + balStr + ')', id);
+                opt.setAttribute('data-balance', c.currentBalance || 0);
+                opt.setAttribute('data-limit', c.debtWarningLimit || 0);
+                opt.setAttribute('data-name', c.name);
+                customerSelect.add(opt);
+              }
+              if (modalDispCustomer) {
+                const opt2 = new Option(c.name, id);
+                modalDispCustomer.add(opt2);
+              }
+            }
+            if (c.type === 'supplier' || c.type === 'both') {
+              if (modalPurchaseSupplier) {
+                const opt = new Option(c.name, id);
+                opt.setAttribute('data-name', c.name);
+                opt.setAttribute('data-balance', c.currentBalance || 0);
+                modalPurchaseSupplier.add(opt);
+              }
+            }
+          });
+        }
+
+        // Load checks
+        const checkSnap = await db.collection('checks').get();
+        window.checksCache = [];
+        const checksList = document.getElementById('checksList');
+        if (checkSnap.size > 0 && checksList) {
+          checksList.innerHTML = '';
+          checkSnap.forEach(doc => {
+            const ch = doc.data();
+            ch.id = doc.id;
+            window.checksCache.push(ch);
+            const statusBadge = ch.status === 'cleared' ? 'bg-green-500/20 text-green-300' :
+                                ch.status === 'deposited' ? 'bg-blue-500/20 text-blue-300' :
+                                ch.status === 'bounced' ? 'bg-red-500/20 text-red-300' :
+                                'bg-amber-500/20 text-amber-300';
+            const statusText = ch.status === 'cleared' ? 'CLEARED (تم الصرف)' :
+                               ch.status === 'deposited' ? 'DEPOSITED (مودع)' :
+                               ch.status === 'bounced' ? 'BOUNCED (راجع)' :
+                               'PENDING (قيد الانتظار)';
+            const typeText = ch.type === 'received' ? 'وارد من عميل' : 'صادر لمورد';
+            const card = document.createElement('div');
+            card.className = 'bg-[#25252D] border border-[#C5A059]/50 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md';
+            card.innerHTML = `
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-white text-sm">شيك #${ch.checkNumber || ch.num || ''}</span>
+                  <span class="px-2 py-0.5 rounded ${statusBadge} font-semibold">${statusText}</span>
+                  <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono text-[10px]">${typeText}</span>
+                </div>
+                <p class="text-gray-400 mt-1">${ch.bank || ''} | فرع: ${ch.branch || ''} | حساب: ${ch.account || ''} | الطرف: ${ch.party || ''}</p>
+                <p class="text-gray-500 mt-0.5">استحقاق: ${ch.dueDate || ''}</p>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="font-mono text-base font-bold text-[#C5A059]">₪ ${(ch.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                <button onclick="previewCheckPdf('${doc.id}')" class="px-3 py-1.5 rounded-lg border border-[#C5A059] text-[#C5A059] hover:bg-[#C5A059]/10 font-bold flex items-center gap-1">📄 معاينة</button>
+              </div>
+            `;
+            checksList.appendChild(card);
+          });
+        }
+
+        console.log('✓ Loaded from Firestore:', window.productsCache.size, 'products,', window.contactsCache.size, 'contacts,', window.checksCache.length, 'checks');
+      });
+    }
+
+    loadFirestoreData().catch(err => console.log('Offline mode — using hardcoded data:', err.message));
   </script>
 
   <!-- New Receipt Modal -->
