@@ -714,6 +714,59 @@
           </button>
         </div>
       </div>
+
+      <!-- Recent Sales Invoices Table -->
+      <div class="bg-[#1E1E24] border border-[#33333E] rounded-2xl p-5 shadow-lg space-y-4">
+        <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>🧾</span> <span>سجل فواتير المبيعات الصادرة الأخيرة (Sales Invoices - חשבוניות מס)</span>
+          </h3>
+          <span class="text-xs text-gray-400">معاينة وطباعة الفاتورة الضريبية A4 PDF مباشرة</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-right border-collapse">
+            <thead>
+              <tr class="border-b border-[#33333E] text-gray-400">
+                <th class="py-2.5 px-3">التاريخ</th>
+                <th class="py-2.5 px-3">رقم الفاتورة</th>
+                <th class="py-2.5 px-3">الزبون / العميل</th>
+                <th class="py-2.5 px-3">الأصناف والكمية</th>
+                <th class="py-2.5 px-3">المبلغ الإجمالي</th>
+                <th class="py-2.5 px-3">طريقة السداد</th>
+                <th class="py-2.5 px-3 text-center">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="recentSalesBody" class="divide-y divide-[#33333E]">
+              <tr>
+                <td class="py-2.5 px-3 font-mono text-gray-400">اليوم</td>
+                <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">INV-2026-00412</td>
+                <td class="py-2.5 px-3 text-white">شركة البراق للمقاولات العامة</td>
+                <td class="py-2.5 px-3 text-gray-300">رخام كلكتا جولد إيطالي (80 م²)</td>
+                <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">₪ 25,000.00</td>
+                <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 font-semibold">ذمة على الحساب</span></td>
+                <td class="py-2.5 px-3 text-center">
+                  <button onclick="previewInvoicePdf('INV-2026-00412')" class="px-2.5 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold mx-auto">
+                    <span>📄</span> PDF
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-3 font-mono text-gray-400">05/11/2026</td>
+                <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">INV-2026-00495</td>
+                <td class="py-2.5 px-3 text-white">شركة البراق للمقاولات العامة</td>
+                <td class="py-2.5 px-3 text-gray-300">سيراميك إسباني وأطقم حمامات</td>
+                <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">₪ 13,700.00</td>
+                <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 font-semibold">ذمة على الحساب</span></td>
+                <td class="py-2.5 px-3 text-center">
+                  <button onclick="previewInvoicePdf('INV-2026-00495')" class="px-2.5 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold mx-auto">
+                    <span>📄</span> PDF
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- TAB: INVENTORY & PURCHASES (المستودع والمشتريات) -->
@@ -960,7 +1013,9 @@
                 <td class="py-2.5 px-3 font-mono text-gray-500">-</td>
                 <td class="py-2.5 px-3 font-mono font-bold text-white">₪ 25,000.00</td>
                 <td class="py-2.5 px-3 text-center">
-                  <span class="text-gray-500 font-mono text-[10px]">-</span>
+                  <button onclick="previewInvoicePdf('INV-2026-00412')" class="px-2 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold text-[11px] mx-auto">
+                    <span>📄</span> معاينة
+                  </button>
                 </td>
               </tr>
               <tr id="row-RCP-2026-00108">
@@ -991,7 +1046,9 @@
                 <td class="py-2.5 px-3 font-mono text-gray-500">-</td>
                 <td class="py-2.5 px-3 font-mono font-bold text-white">₪ 28,700.00</td>
                 <td class="py-2.5 px-3 text-center">
-                  <span class="text-gray-500 font-mono text-[10px]">-</span>
+                  <button onclick="previewInvoicePdf('INV-2026-00495')" class="px-2 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold text-[11px] mx-auto">
+                    <span>📄</span> معاينة
+                  </button>
                 </td>
               </tr>
               <tr class="bg-red-500/5">
@@ -2051,10 +2108,39 @@
             <td class="py-2.5 px-3 font-mono text-gray-500">-</td>
             <td class="py-2.5 px-3 font-mono text-[#C5A059]">₪ ${newBal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
             <td class="py-2.5 px-3 text-center">
-              <span class="text-gray-500 font-mono text-[10px]">-</span>
+              <button onclick="previewInvoicePdf('${sale.invoiceNumber}')" class="px-2 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold text-[11px] mx-auto">
+                <span>📄</span> معاينة
+              </button>
             </td>
           `;
           tbody.appendChild(tr);
+        }
+
+        // Store in salesCache
+        if (!window.salesCache) window.salesCache = new Map();
+        window.salesCache.set(sale.invoiceNumber, sale);
+        window.salesCache.set(saleRef.id, sale);
+
+        // Prepend to recent sales table in POS tab
+        const recentSales = document.getElementById('recentSalesBody');
+        if (recentSales) {
+          const trSale = document.createElement('tr');
+          trSale.className = 'bg-[#C5A059]/10 font-bold transition';
+          const payType = payDebt > 0 && (payCash > 0 || payCheck > 0) ? 'دفع مجزأ' : (payDebt > 0 ? 'ذمة على الحساب' : 'مسددة بالكامل');
+          trSale.innerHTML = `
+            <td class="py-2.5 px-3 font-mono text-gray-400">اليوم</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">${sale.invoiceNumber}</td>
+            <td class="py-2.5 px-3 text-white">${custName || 'عميل نقدي'}</td>
+            <td class="py-2.5 px-3 text-gray-300">${qty} ${unit === 'box' ? 'كرتونة' : (unit === 'meter' ? 'م²' : 'حبة')} ${prodName ? prodName.split('/')[0].trim() : ''}</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">₪ ${grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded ${payDebt > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-green-500/20 text-green-300'} font-semibold">${payType}</span></td>
+            <td class="py-2.5 px-3 text-center">
+              <button onclick="previewInvoicePdf('${sale.invoiceNumber}')" class="px-2.5 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold mx-auto">
+                <span>📄</span> PDF
+              </button>
+            </td>
+          `;
+          recentSales.prepend(trSale);
         }
 
         // Add check to checks list if check payment
@@ -2099,7 +2185,232 @@
         }
       });
 
-      showToast('✅ تم إصدار الفاتورة بنجاح! تم خصم الكميات من المستودع وترحيل الذمم.');
+      showToast('✅ تم إصدار الفاتورة ' + sale.invoiceNumber + ' بنجاح! تم خصم المخزون وقيد الذمم.');
+      previewInvoicePdf(sale.invoiceNumber);
+    }
+
+    // --- SALES INVOICES CACHE & PREVIEW ---
+    window.salesCache = new Map();
+    window.salesCache.set('INV-2026-00412', {
+      id: 'sale-00412',
+      invoiceNumber: 'INV-2026-00412',
+      date: '2026-10-01',
+      customerName: 'شركة البراق للمقاولات العامة',
+      customerTaxId: '515892104',
+      customerPhone: '052-1234567',
+      customerAddress: 'رام الله - حي الماصيون',
+      allocationNumber: 'ALLOC-9812-ISR',
+      items: [
+        { productName: 'رخام كلكتا جولد إيطالي / שיש קלקטה', qty: 80, unit: 'م²', unitPrice: 280, total: 22400 },
+        { productName: 'خلاط مغسلة جروهي ألماني كروم', qty: 4, unit: 'حبة', unitPrice: 480, total: 1920 }
+      ],
+      subtotal: 21367.52,
+      vat: 3632.48,
+      total: 25000.00,
+      payDebt: 25000.00,
+      payCash: 0,
+      payCheck: 0
+    });
+
+    window.salesCache.set('INV-2026-00495', {
+      id: 'sale-00495',
+      invoiceNumber: 'INV-2026-00495',
+      date: '2026-11-05',
+      customerName: 'شركة البراق للمقاولات العامة',
+      customerTaxId: '515892104',
+      customerPhone: '052-1234567',
+      customerAddress: 'رام الله - حي الماصيون',
+      allocationNumber: 'ALLOC-9850-ISR',
+      items: [
+        { productName: 'بورسلان إسباني 60x120 سوبر وايت', qty: 65, unit: 'م²', unitPrice: 145, total: 9425 },
+        { productName: 'كرسي معلق إسباني روشا', qty: 3, unit: 'حبة', unitPrice: 1150, total: 3450 }
+      ],
+      subtotal: 11709.40,
+      vat: 1990.60,
+      total: 13700.00,
+      payDebt: 13700.00,
+      payCash: 0,
+      payCheck: 0
+    });
+
+    function previewInvoicePdf(invNumOrId) {
+      let inv = window.salesCache.get(invNumOrId);
+      if (!inv) {
+        for (const [k, v] of window.salesCache.entries()) {
+          if (v.invoiceNumber === invNumOrId || v.id === invNumOrId) { inv = v; break; }
+        }
+      }
+      if (!inv) {
+        inv = {
+          invoiceNumber: invNumOrId,
+          date: new Date().toISOString().split('T')[0],
+          customerName: 'شركة البراق للمقاولات العامة',
+          customerTaxId: '515892104',
+          allocationNumber: document.getElementById('allocationInput')?.value.trim() || 'ALLOC-GEN-2026',
+          items: [
+            { productName: 'رخام وبورسلان نخب أول', qty: 50, unit: 'م²', unitPrice: 280, total: 14000 }
+          ],
+          subtotal: 14000,
+          vat: 2380,
+          total: 16380,
+          payDebt: 5000,
+          payCash: 5000,
+          payCheck: 6380
+        };
+      }
+
+      let modal = document.getElementById('salesInvoicePdfModal');
+      if (modal) modal.remove();
+
+      let itemsRows = '';
+      if (inv.items && inv.items.length > 0) {
+        inv.items.forEach((item, idx) => {
+          const lineTot = item.total || (item.qty * (item.unitPrice || 0)) || inv.subtotal;
+          itemsRows += `
+            <tr class="border-b border-gray-200">
+              <td class="p-2 border border-gray-300 font-mono text-center">${idx + 1}</td>
+              <td class="p-2 border border-gray-300 font-bold text-gray-800">${item.productName || 'صنف توريد'}</td>
+              <td class="p-2 border border-gray-300 text-center font-mono">${item.qty || 1} ${item.unit || ''}</td>
+              <td class="p-2 border border-gray-300 font-mono text-left rtl:text-right">₪ ${(item.unitPrice || (lineTot / (item.qty || 1))).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+              <td class="p-2 border border-gray-300 font-mono font-bold text-left rtl:text-right">₪ ${lineTot.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            </tr>
+          `;
+        });
+      } else {
+        itemsRows = `
+          <tr class="border-b border-gray-200">
+            <td class="p-2 border border-gray-300 font-mono text-center">1</td>
+            <td class="p-2 border border-gray-300 font-bold text-gray-800">أصناف مشتريات وتوريد مبيعات عامة</td>
+            <td class="p-2 border border-gray-300 text-center font-mono">1 مجموعة</td>
+            <td class="p-2 border border-gray-300 font-mono text-left rtl:text-right">₪ ${(inv.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="p-2 border border-gray-300 font-mono font-bold text-left rtl:text-right">₪ ${(inv.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+          </tr>
+        `;
+      }
+
+      modal = document.createElement('div');
+      modal.id = 'salesInvoicePdfModal';
+      modal.className = 'pdf-preview-modal fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🧾</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">معاينة فاتورة ضريبية وسند قبض رسمي (A4 PDF)</h3>
+                <p class="text-[11px] text-[#C5A059]">חשבונית מס / קבלה רשמית - תקן ישראלי</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('salesInvoicePdfModal').remove()" class="text-gray-400 hover:text-white text-lg">✕</button>
+          </div>
+
+          <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+            <!-- Header Banner -->
+            <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
+              <div>
+                <h2 class="text-base font-bold text-black tracking-wide">M.I.R.N POWER Ltd.</h2>
+                <div class="text-[11px] text-gray-700 font-bold">חברת מ.י.ר.ן פאוור בע"מ | شركة م.ي.ר.ن باور م.ض</div>
+                <div class="text-[10px] text-gray-600">أدوات صحية، رخام، حجر طبيعي، ونقل وشحن</div>
+                <div class="text-[10px] text-gray-600">ח.פ / ر.ض: 515892104 | هاتف: 02-1234567 | ירושלים - עטרות</div>
+              </div>
+              <div class="text-left rtl:text-right space-y-1">
+                <div class="bg-[#1E1E24] text-white px-3 py-1 rounded font-bold text-xs">חשבונית מס / קבלה - فاتورة مس</div>
+                <div class="font-mono font-bold text-sm text-[#9E7D3B]">${inv.invoiceNumber}</div>
+                <div class="text-[10px] text-gray-600">التاريخ: <span class="font-mono font-bold text-black">${inv.date}</span></div>
+                ${inv.allocationNumber ? `<div class="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-semibold">מס' הקצאה: ${inv.allocationNumber}</div>` : ''}
+              </div>
+            </div>
+
+            <!-- Customer Box -->
+            <div class="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded border border-gray-200">
+              <div>
+                <div class="text-gray-500 text-[10px] uppercase font-bold">פרטי לקוח / تفاصيل المشتري (الزبون)</div>
+                <div class="font-bold text-sm text-gray-900 mt-0.5">${inv.customerName || 'عميل نقدي'}</div>
+                <div class="text-gray-600 text-[11px]">ح.ف / الرقم الضريبي: ${inv.customerTaxId || '515892104'}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 text-[10px] uppercase font-bold">כתובת ויעד / العنوان ومكان التسليم</div>
+                <div class="text-gray-800 text-[11px] font-medium mt-0.5">${inv.customerAddress || 'الورشة المركزية - رام الله'}</div>
+                <div class="text-gray-600 text-[10px] mt-0.5">هاتف: ${inv.customerPhone || '052-1234567'}</div>
+              </div>
+            </div>
+
+            <!-- Line Items Table -->
+            <div>
+              <table class="w-full text-left rtl:text-right border-collapse text-xs">
+                <thead>
+                  <tr class="bg-[#1E1E24] text-white text-[11px]">
+                    <th class="p-2 border border-gray-600 text-center">#</th>
+                    <th class="p-2 border border-gray-600">תיאור הפריט / بيان الصنف والسلعة</th>
+                    <th class="p-2 border border-gray-600 text-center">הכמות / الكمية</th>
+                    <th class="p-2 border border-gray-600 text-left rtl:text-right">מחיר יחידה / السعر</th>
+                    <th class="p-2 border border-gray-600 text-left rtl:text-right">סה"כ / الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsRows}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Totals & Payment Breakdown Grid -->
+            <div class="grid grid-cols-2 gap-4">
+              <!-- Split Payment Breakdown -->
+              <div class="bg-gray-50 p-3 rounded border border-gray-200 text-[11px] space-y-1.5">
+                <div class="font-bold text-gray-800 text-xs border-b border-gray-300 pb-1">פירוט תקבולים / طريقة وتسوية الدفع:</div>
+                <div class="flex justify-between text-gray-700">
+                  <span>نقداً (Cash):</span>
+                  <span class="font-mono font-bold text-emerald-800">₪ ${(inv.payCash || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div class="flex justify-between text-gray-700">
+                  <span>شيكات بنكية (Checks):</span>
+                  <span class="font-mono font-bold text-blue-800">₪ ${(inv.payCheck || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ${inv.checkNumber ? '(شيك #' + inv.checkNumber + ')' : ''}</span>
+                </div>
+                <div class="flex justify-between text-gray-700">
+                  <span>قيد على الحساب / ذمة (On-Account):</span>
+                  <span class="font-mono font-bold text-amber-800">₪ ${(inv.payDebt || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+              </div>
+
+              <!-- Financial Tax Totals -->
+              <div class="bg-amber-50/50 p-3 rounded border border-amber-200 text-xs space-y-1.5">
+                <div class="flex justify-between text-gray-600 text-[11px]">
+                  <span>المجموع قبل الضريبة (לפני מע"מ):</span>
+                  <span class="font-mono font-bold">₪ ${(inv.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div class="flex justify-between text-gray-600 text-[11px]">
+                  <span>ضريبة القيمة المضافة (מע"מ 17%):</span>
+                  <span class="font-mono font-bold">₪ ${(inv.vat || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div class="flex justify-between border-t border-amber-300 pt-1.5 text-sm font-bold text-amber-900">
+                  <span>الإجمالي النهائي (כולل מע"מ):</span>
+                  <span class="font-mono text-base">₪ ${(inv.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Statutory Dual Signatures Block -->
+            <div class="pt-4 border-t border-gray-300 grid grid-cols-2 gap-4 text-center">
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">حسابات ومبيعات / חתימת המוכר</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">توقيع المحاسب / البائع</div>
+              </div>
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">المستلم / חתימת הלקוח</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">توقيع وختم المشتري</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-2 border-t border-[#33333E]">
+            <button onclick="window.print()" class="px-5 py-2.5 rounded-xl font-bold bg-[#C5A059] hover:bg-[#D4AF37] text-black text-xs transition flex items-center gap-2 shadow-lg">
+              <span>🖨️</span> <span>طباعة الفاتورة الضريبية (הדפס חשבונית מס)</span>
+            </button>
+            <button onclick="document.getElementById('salesInvoicePdfModal').remove()" class="px-4 py-2.5 rounded-xl font-semibold bg-[#25252D] hover:bg-[#33333E] text-gray-300 text-xs transition">إغلاق</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
 
     // Receipts Cache & Edit State
@@ -3734,6 +4045,44 @@
           }
         } catch (errRec) {
           console.warn('Receipts load note:', errRec);
+        }
+
+        // Load sales
+        try {
+          const saleSnap = await db.collection('sales').get();
+          if (saleSnap.size > 0) {
+            saleSnap.forEach(doc => {
+              const s = doc.data();
+              s.id = doc.id;
+              window.salesCache.set(s.invoiceNumber || doc.id, s);
+              window.salesCache.set(doc.id, s);
+
+              // Add to recent sales table if not already present
+              const recentSales = document.getElementById('recentSalesBody');
+              if (recentSales && !document.getElementById('row-sale-' + (s.invoiceNumber || doc.id))) {
+                const tr = document.createElement('tr');
+                tr.id = 'row-sale-' + (s.invoiceNumber || doc.id);
+                const payType = (s.payDebt || 0) > 0 && ((s.payCash || 0) > 0 || (s.payCheck || 0) > 0) ? 'دفع مجزأ' : ((s.payDebt || 0) > 0 ? 'ذمة على الحساب' : 'مسددة بالكامل');
+                const itemDesc = s.items && s.items.length > 0 ? `${s.items[0].qty} ${s.items[0].unit || ''} ${s.items[0].productName ? s.items[0].productName.split('/')[0].trim() : ''}` : 'أصناف مبيعات';
+                tr.innerHTML = `
+                  <td class="py-2.5 px-3 font-mono text-gray-400">${s.date || 'اليوم'}</td>
+                  <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">${s.invoiceNumber || doc.id}</td>
+                  <td class="py-2.5 px-3 text-white">${s.customerName || 'عميل نقدي'}</td>
+                  <td class="py-2.5 px-3 text-gray-300">${itemDesc}</td>
+                  <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">₪ ${(s.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                  <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded ${(s.payDebt || 0) > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-green-500/20 text-green-300'} font-semibold">${payType}</span></td>
+                  <td class="py-2.5 px-3 text-center">
+                    <button onclick="previewInvoicePdf('${s.invoiceNumber || doc.id}')" class="px-2.5 py-1 rounded bg-[#25252D] hover:bg-[#33333E] text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center gap-1 font-semibold mx-auto">
+                      <span>📄</span> PDF
+                    </button>
+                  </td>
+                `;
+                recentSales.prepend(tr);
+              }
+            });
+          }
+        } catch (errSales) {
+          console.warn('Sales load note:', errSales);
         }
 
         console.log('✓ Loaded from Firestore:', window.productsCache.size, 'products,', window.contactsCache.size, 'contacts,', window.checksCache.length, 'checks');
