@@ -79,14 +79,77 @@
       const modal = document.getElementById('modalAddProduct');
       if (modal) modal.classList.add('hidden');
     }
-    function submitAddProduct() {
+    async function submitAddProduct() {
       const nameAr = document.getElementById('modalProdNameAr')?.value.trim();
+      const nameHe = document.getElementById('modalProdNameHe')?.value.trim() || '';
       const sku = document.getElementById('modalProdSku')?.value.trim();
       const price = parseFloat(document.getElementById('modalProdPrice')?.value) || 0;
+      const cost = parseFloat(document.getElementById('modalProdCost')?.value) || 0;
+      const stock = parseFloat(document.getElementById('modalProdStock')?.value) || 0;
+      const category = document.getElementById('modalProdCategory')?.value || 'marble';
+      const unitType = document.getElementById('modalProdUnit')?.value || 'meter';
+      const meterPerBox = parseFloat(document.getElementById('modalProdMeterPerBox')?.value) || 1.44;
+
       if (!nameAr || !sku || price <= 0) {
         alert('يرجى ملء اسم الصنف، الرمز التجاري، وسعر البيع');
         return;
       }
+
+      const fullName = nameHe ? nameAr + ' / ' + nameHe : nameAr;
+
+      await withAuth(async (db) => {
+        const docRef = db.collection('products').doc();
+        const product = {
+          id: docRef.id, name: fullName, sku, category, unitType, meterPerBox,
+          purchaseCost: cost, sellingPrice: price, currentStock: stock, minStockAlert: 10
+        };
+        await docRef.set(product);
+        window.productsCache.set(docRef.id, product);
+
+        // Add row to inventory table
+        const invBody = document.getElementById('inventoryTableBody');
+        if (invBody) {
+          const unitLabel = unitType === 'piece' ? 'حبة' : 'م²';
+          const tr = document.createElement('tr');
+          tr.id = 'row-' + docRef.id;
+          tr.className = 'bg-green-500/10 font-bold transition duration-500';
+          tr.innerHTML = `
+            <td class="py-2.5 px-3 font-mono text-[#C5A059] font-bold">${sku}</td>
+            <td class="py-2.5 px-3 text-white font-medium">${fullName}</td>
+            <td class="py-2.5 px-3 font-mono stock-qty">${stock.toLocaleString('en-US', {minimumFractionDigits:1})} ${unitLabel}</td>
+            <td class="py-2.5 px-3 font-mono cost-val">₪ ${cost.toFixed(2)}</td>
+            <td class="py-2.5 px-3 font-mono text-[#C5A059]">₪ ${price.toFixed(2)}</td>
+            <td class="py-2.5 px-3 packing-info">${unitType !== 'piece' ? (stock / meterPerBox).toFixed(1) + ' كرتونة (' + meterPerBox + ' م²/كرتونة)' : '-'}</td>
+            <td class="py-2.5 px-3 status-cell"><span class="px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-semibold flex items-center gap-1 w-max">✓ وافر</span></td>
+          `;
+          invBody.appendChild(tr);
+          setTimeout(() => tr.className = '', 3000);
+        }
+
+        // Add to product dropdowns
+        const prodSelect = document.getElementById('prodSelect');
+        if (prodSelect) {
+          const opt = document.createElement('option');
+          opt.value = docRef.id;
+          opt.textContent = fullName;
+          opt.setAttribute('data-price', price);
+          opt.setAttribute('data-unit', unitType);
+          opt.setAttribute('data-stock', stock);
+          prodSelect.appendChild(opt);
+        }
+        const modalPurchaseProduct = document.getElementById('modalPurchaseProduct');
+        if (modalPurchaseProduct) {
+          const opt2 = document.createElement('option');
+          opt2.value = docRef.id;
+          opt2.textContent = fullName;
+          opt2.setAttribute('data-name', fullName);
+          opt2.setAttribute('data-factor', meterPerBox);
+          opt2.setAttribute('data-unit', unitType);
+          opt2.setAttribute('data-cost', cost);
+          modalPurchaseProduct.appendChild(opt2);
+        }
+      });
+
       closeAddProductModal();
       showToast('✅ تم بنجاح تسجيل الصنف الجديد: ' + nameAr + ' (' + sku + ') في المستودع!');
     }
@@ -2108,12 +2171,13 @@
       }
     }
 
-    function submitPurchaseModal() {
+    async function submitPurchaseModal() {
       const invNum = document.getElementById('modalPurchaseInvNumber').value || 'PUR-2026-00101';
       const suppRef = document.getElementById('modalPurchaseSupplierRef').value || 'SUP-INV';
       const suppSelect = document.getElementById('modalPurchaseSupplier');
       const suppOpt = suppSelect.options[suppSelect.selectedIndex];
       const suppName = suppOpt.getAttribute('data-name');
+      const suppId = suppSelect.value;
       let currentBal = parseFloat(suppOpt.getAttribute('data-balance')) || 0;
 
       const prodSelect = document.getElementById('modalPurchaseProduct');
@@ -2155,7 +2219,8 @@
 
         let oldStock = parseFloat(stockCell.textContent.replace(',', '')) || 0;
         let newStock = oldStock + convertedStock;
-        let unitLabel = prodId === 'prod-003' || prodId === 'prod-004' ? 'حبة' : 'م²';
+        const cachedProd = window.productsCache.get(prodId);
+        let unitLabel = (cachedProd && cachedProd.unitType === 'piece') || prodId === 'prod-003' || prodId === 'prod-005' || prodId === 'prod-006' ? 'حبة' : 'م²';
 
         stockCell.textContent = newStock.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' ' + unitLabel;
         costCell.textContent = '₪ ' + costPerBaseUnit.toFixed(2);
@@ -2193,12 +2258,107 @@
       const lowAlerts = document.getElementById('kpiLowStockCount');
       if (lowAlerts) lowAlerts.textContent = '1 صنف';
 
+      // --- FIRESTORE WRITES ---
+      await withAuth(async (db) => {
+        const purchaseRef = db.collection('purchases').doc();
+        await purchaseRef.set({
+          id: purchaseRef.id, invoiceNumber: invNum, supplierRef: suppRef,
+          supplierId: suppId, supplierName: suppName, productId: prodId, productName: prodName,
+          unit, qty, unitCost, convertedStock, subtotal, vat, total, isImmediate,
+          date: new Date().toISOString().split('T')[0],
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Update product stock in Firestore
+        if (prodId) {
+          await db.collection('products').doc(prodId).update({
+            currentStock: firebase.firestore.FieldValue.increment(convertedStock),
+            purchaseCost: costPerBaseUnit
+          });
+          const cached = window.productsCache.get(prodId);
+          if (cached) cached.currentStock = (cached.currentStock || 0) + convertedStock;
+        }
+
+        // Update supplier balance if not immediate
+        if (!isImmediate && suppId) {
+          await db.collection('contacts').doc(suppId).update({
+            currentBalance: firebase.firestore.FieldValue.increment(total)
+          });
+          const cached = window.contactsCache.get(suppId);
+          if (cached) cached.currentBalance = (cached.currentBalance || 0) + total;
+        }
+      });
+
       closePurchaseModal();
-      alert(`✓ تم تسجيل فاتورة المشتريات وتوريد البضاعة (${invNum}) بنجاح!\n- تم تحديث رصيد ${prodName} في المستودع بمقدار +${convertedStock.toFixed(1)}.\n- تم تحديث التكلفة المرجحة.\n${!isImmediate ? '- تم قيد الذمة على حساب المورد ' + suppName : '- تم السداد الفوري'}\n- يمكنك الآن معاينة وطباعة مستند A4 PDF.`);
+      showToast(`✅ تم تسجيل فاتورة المشتريات (${invNum}) بنجاح! +${convertedStock.toFixed(1)} للمخزون.`);
     }
 
     function previewPurchasePdf(invNum, suppName, total) {
-      alert(`[معاينة A4 PDF الرسمية]\n\nرقم الفاتورة: ${invNum}\nالمورد: ${suppName}\nالإجمالي شامل 17% מע"מ: ${total}\nالمعايير: نظام فواتير وضريبة إسرائيلية معتمدة\nالحالة: جاهز للطباعة أو التصدير بصيغة PDF.`);
+      // Create purchase PDF modal dynamically
+      let modal = document.getElementById('purchasePdfModal');
+      if (modal) modal.remove();
+
+      modal = document.createElement('div');
+      modal.id = 'purchasePdfModal';
+      modal.className = 'pdf-preview-modal fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">📄</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">معاينة فاتورة مشتريات رسمية (A4 PDF)</h3>
+                <p class="text-[11px] text-[#C5A059]">חשבונית רכש רשמית - תקן ישראלי</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('purchasePdfModal').remove()" class="text-gray-400 hover:text-white text-lg">✕</button>
+          </div>
+          <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+            <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
+              <div>
+                <h2 class="text-base font-bold text-black tracking-wide">M.I.R.N POWER Ltd.</h2>
+                <div class="text-[11px] text-gray-700 font-bold">חברת מ.י.ר.ן פאוור בע"מ | شركة م.ي.ר.ن باور م.ض</div>
+                <div class="text-[10px] text-gray-600">أدوات صحية، رخام، حجر، ونقل وشحن | כלים סניטריים, שיש והובלה</div>
+                <div class="text-[10px] text-gray-600">ח.פ / ر.ض: 515892104 | هاتف: 02-1234567 | ירושלים - עטרות</div>
+              </div>
+              <div class="text-left rtl:text-right space-y-1">
+                <div class="bg-[#1E1E24] text-white px-3 py-1 rounded font-bold text-xs">חשבונית רכש / فاتورة مشتريات</div>
+                <div class="font-mono font-bold text-sm text-[#9E7D3B]">${invNum}</div>
+                <div class="text-[10px] text-gray-600">التاريخ: <span class="font-mono">${new Date().toISOString().split('T')[0]}</span></div>
+              </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded border border-gray-200">
+              <div class="text-gray-500 text-[10px] uppercase font-bold">פרטי ספק / بيانات المورد</div>
+              <div class="font-bold text-sm text-gray-900 mt-0.5">${suppName}</div>
+            </div>
+            <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 flex justify-between items-center">
+              <div class="text-amber-800 text-[10px] font-bold uppercase">סכום כולל מע"מ 17% / الإجمالي شامل الضريبة</div>
+              <div class="text-xl font-bold font-mono text-amber-900">${total}</div>
+            </div>
+            <div class="pt-4 border-t border-gray-300 grid grid-cols-3 gap-4 text-center">
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">חתימת הספק / توقيع المورد</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">______________</div>
+              </div>
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">חתימת מנהל רכש / مدير المشتريات</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">______________</div>
+              </div>
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">חותמת החברה / ختم الشركة</div>
+                <div class="font-bold text-[#9E7D3B] text-[11px] mt-4">M.I.R.N POWER</div>
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-between items-center pt-2 border-t border-[#33333E]">
+            <button onclick="window.print()" class="px-5 py-2.5 rounded-xl font-bold bg-[#C5A059] hover:bg-[#D4AF37] text-black text-xs transition flex items-center gap-2 shadow-lg">
+              <span>🖨️</span> <span>طباعة فاتورة المشتريات (הדפס חשבונית)</span>
+            </button>
+            <button onclick="document.getElementById('purchasePdfModal').remove()" class="px-4 py-2.5 rounded-xl font-semibold bg-[#25252D] hover:bg-[#33333E] text-gray-300 text-xs transition">إغلاق</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
 
     // --- FLEET & DISPATCHES STATE & LOGIC ---
