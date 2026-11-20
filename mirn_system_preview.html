@@ -892,7 +892,7 @@
             <button onclick="openReceiptModal()" class="px-3 py-2 rounded-xl text-xs font-bold bg-[#2E7D32] hover:bg-[#388E3C] text-white transition flex items-center gap-1.5 shadow-md">
               <span>➕</span> <span>سند قبض جديد / קבלה חדשה</span>
             </button>
-            <button onclick="alert('تم توليد كشف الحساب A4 PDF بنجاح وفق المعايير الإسرائيلية الرسمية مع اللوجو ورقم الحساب البنكي!')" class="px-4 py-2 rounded-xl text-xs font-bold bg-[#C5A059] text-black hover:bg-[#D4AF37] transition flex items-center gap-2">
+            <button onclick="exportStatementPdf()" class="px-4 py-2 rounded-xl text-xs font-bold bg-[#C5A059] text-black hover:bg-[#D4AF37] transition flex items-center gap-2">
               <span>📥</span> <span>تصدير A4 PDF رسمي</span>
             </button>
           </div>
@@ -2024,6 +2024,92 @@
 
     function openReceiptModal() {
       document.getElementById('receiptModal').classList.remove('hidden');
+      populateReceiptCustomerDropdown();
+    }
+
+    function exportStatementPdf() {
+      // Get current statement rows
+      const rows = document.querySelectorAll('#view-statements tbody tr');
+      let tableRows = '';
+      rows.forEach(r => {
+        const cells = r.querySelectorAll('td');
+        if (cells.length >= 7) {
+          tableRows += `<tr class="border-b border-gray-200">
+            <td class="p-1.5 border border-gray-300 text-[10px]">${cells[0].textContent}</td>
+            <td class="p-1.5 border border-gray-300 font-mono text-[10px]">${cells[1].textContent}</td>
+            <td class="p-1.5 border border-gray-300 text-[10px]">${cells[2].textContent}</td>
+            <td class="p-1.5 border border-gray-300 text-[10px]">${cells[3].textContent}</td>
+            <td class="p-1.5 border border-gray-300 font-mono text-[10px]">${cells[4].textContent}</td>
+            <td class="p-1.5 border border-gray-300 font-mono text-[10px]">${cells[5].textContent}</td>
+            <td class="p-1.5 border border-gray-300 font-mono font-bold text-[10px]">${cells[6].textContent}</td>
+          </tr>`;
+        }
+      });
+
+      let modal = document.getElementById('statementPdfModal');
+      if (modal) modal.remove();
+
+      modal = document.createElement('div');
+      modal.id = 'statementPdfModal';
+      modal.className = 'pdf-preview-modal fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-[#1E1E24] border border-[#C5A059] rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center border-b border-[#33333E] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">📑</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">كشف حساب ذمم رسمي (A4 PDF)</h3>
+                <p class="text-[11px] text-[#C5A059]">דוח יתרות וכרטסת לקוח רשמי</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('statementPdfModal').remove()" class="text-gray-400 hover:text-white text-lg">✕</button>
+          </div>
+          <div class="pdf-paper bg-white text-black p-6 rounded-xl shadow-inner text-xs space-y-4 border border-gray-300 font-sans">
+            <div class="border-b-2 border-[#C5A059] pb-3 flex justify-between items-start">
+              <div>
+                <h2 class="text-base font-bold text-black">M.I.R.N POWER Ltd.</h2>
+                <div class="text-[11px] text-gray-700 font-bold">חברת מ.י.ר.ן פאוור בע"מ | شركة م.ي.ר.ن باور م.ض</div>
+                <div class="text-[10px] text-gray-600">ח.פ / ر.ض: 515892104 | هاتف: 02-1234567</div>
+              </div>
+              <div class="text-left rtl:text-right space-y-1">
+                <div class="bg-[#1E1E24] text-white px-3 py-1 rounded font-bold text-xs">דוח יתרות / كشف حساب</div>
+                <div class="text-[10px] text-gray-600">التاريخ: ${new Date().toISOString().split('T')[0]}</div>
+              </div>
+            </div>
+            <table class="w-full text-left rtl:text-right border-collapse text-[10px]">
+              <thead>
+                <tr class="bg-[#1E1E24] text-white">
+                  <th class="p-1.5 border border-gray-600">التاريخ</th>
+                  <th class="p-1.5 border border-gray-600">المرجع</th>
+                  <th class="p-1.5 border border-gray-600">النوع</th>
+                  <th class="p-1.5 border border-gray-600">البيان</th>
+                  <th class="p-1.5 border border-gray-600">مدين</th>
+                  <th class="p-1.5 border border-gray-600">دائن</th>
+                  <th class="p-1.5 border border-gray-600">الرصيد</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+            <div class="pt-4 border-t border-gray-300 grid grid-cols-2 gap-4 text-center">
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">חתימת הלקוח / توقيع العميل</div>
+                <div class="font-bold text-gray-800 text-[11px] mt-4">______________</div>
+              </div>
+              <div class="border-t border-gray-400 pt-1">
+                <div class="text-[10px] text-gray-500">חותמת החברה / ختم الشركة</div>
+                <div class="font-bold text-[#9E7D3B] text-[11px] mt-4">M.I.R.N POWER</div>
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-between items-center pt-2 border-t border-[#33333E]">
+            <button onclick="window.print()" class="px-5 py-2.5 rounded-xl font-bold bg-[#C5A059] hover:bg-[#D4AF37] text-black text-xs transition flex items-center gap-2 shadow-lg">
+              <span>🖨️</span> <span>طباعة كشف الحساب</span>
+            </button>
+            <button onclick="document.getElementById('statementPdfModal').remove()" class="px-4 py-2.5 rounded-xl font-semibold bg-[#25252D] hover:bg-[#33333E] text-gray-300 text-xs transition">إغلاق</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
 
     function closeReceiptModal() {
@@ -2031,19 +2117,47 @@
     }
 
     function updateReceiptProjectedBalance() {
-      const curBalance = 38200.0;
+      const sel = document.getElementById('receiptCustomerSelect');
+      const custId = sel?.value;
+      const cached = custId ? window.contactsCache.get(custId) : null;
+      const curBalance = cached ? (cached.currentBalance || 0) : 0;
       const amount = parseFloat(document.getElementById('modalReceiptAmount').value) || 0;
       const newBal = (curBalance - amount).toFixed(2);
       document.getElementById('modalProjectedBalance').textContent = '₪ ' + Number(newBal).toLocaleString('en-US', {minimumFractionDigits: 2});
     }
 
-    function submitReceiptModal() {
+    function onReceiptCustomerChange() {
+      const sel = document.getElementById('receiptCustomerSelect');
+      const custId = sel?.value;
+      const cached = custId ? window.contactsCache.get(custId) : null;
+      const balance = cached ? (cached.currentBalance || 0) : 0;
+      document.getElementById('receiptCurrentBalance').textContent = '₪ ' + balance.toLocaleString('en-US', {minimumFractionDigits: 2});
+      updateReceiptProjectedBalance();
+    }
+
+    function populateReceiptCustomerDropdown() {
+      const sel = document.getElementById('receiptCustomerSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      window.contactsCache.forEach((c, id) => {
+        if (c.type === 'customer' || c.type === 'both') {
+          const opt = new Option(c.name + ' (رصيد: ₪' + (c.currentBalance || 0).toLocaleString('en-US', {minimumFractionDigits:2}) + ')', id);
+          sel.add(opt);
+        }
+      });
+      onReceiptCustomerChange();
+    }
+
+    async function submitReceiptModal() {
       const recNum = document.getElementById('modalReceiptNumber').value || 'RCP-2026-00109';
       const amount = parseFloat(document.getElementById('modalReceiptAmount').value) || 0;
       const cash = parseFloat(document.getElementById('modalCashAmount').value) || 0;
       const check = parseFloat(document.getElementById('modalCheckAmount').value) || 0;
       const chkNum = document.getElementById('modalCheckNumber').value || '';
       const bank = document.getElementById('modalBankName').value || '';
+      const sel = document.getElementById('receiptCustomerSelect');
+      const custId = sel?.value;
+      const custName = sel ? sel.options[sel.selectedIndex]?.text : '';
 
       if (amount <= 0) {
         alert('يرجى إدخال مبلغ صحيح للسند');
@@ -2054,11 +2168,45 @@
         return;
       }
 
+      await withAuth(async (db) => {
+        const receiptRef = db.collection('receipts').doc();
+        await receiptRef.set({
+          id: receiptRef.id, receiptNumber: recNum, amount, cash, check,
+          checkNumber: chkNum || null, bank: bank || null,
+          customerId: custId || null, customerName: custName,
+          date: new Date().toISOString().split('T')[0],
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Update customer balance
+        if (custId) {
+          await db.collection('contacts').doc(custId).update({
+            currentBalance: firebase.firestore.FieldValue.increment(-amount)
+          });
+          const cached = window.contactsCache.get(custId);
+          if (cached) cached.currentBalance = (cached.currentBalance || 0) - amount;
+        }
+
+        // Add check to checks collection if applicable
+        if (check > 0 && chkNum) {
+          const checkRef = db.collection('checks').doc();
+          const checkDoc = {
+            id: checkRef.id, checkNumber: chkNum, amount: check, bank, branch: '', account: '',
+            party: custName, dueDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
+            type: 'received', status: 'pending', sourceReceipt: recNum,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          await checkRef.set(checkDoc);
+          window.checksCache.push(checkDoc);
+        }
+      });
+
       // Add to table
       const tbody = document.querySelector('#view-statements tbody');
       const tr = document.createElement('tr');
       tr.className = 'bg-green-500/10 font-bold';
-      const newBal = (38200.0 - amount).toFixed(2);
+      const cached = custId ? window.contactsCache.get(custId) : null;
+      const newBal = cached ? cached.currentBalance : 0;
       tr.innerHTML = `
         <td class="py-2.5 px-3 font-mono text-gray-300">اليوم</td>
         <td class="py-2.5 px-3 font-mono text-[#C5A059]">${recNum}</td>
@@ -2070,7 +2218,7 @@
       `;
       tbody.appendChild(tr);
 
-      // If check was paid, add to checks
+      // If check was paid, add to checks UI
       if (check > 0 && chkNum) {
         const checksList = document.getElementById('checksList');
         const chkDiv = document.createElement('div');
@@ -2081,19 +2229,18 @@
               <span class="font-bold text-white text-sm">شيك #${chkNum}</span>
               <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">PENDING (وارد من سند ${recNum})</span>
             </div>
-            <p class="text-gray-400 mt-1">${bank} | الساحب: شركة البراق للمقاولات</p>
-            <p class="text-gray-500 mt-0.5">استحقاق: 2026-12-15</p>
+            <p class="text-gray-400 mt-1">${bank} | الساحب: ${custName}</p>
           </div>
           <div class="flex items-center gap-4">
             <span class="font-mono text-base font-bold text-[#C5A059]">₪ ${check.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
-            <button onclick="alert('تم تحويل حالة الشيك إلى: مودع بالبنك')" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium">إيداع بالبنك</button>
+            <button onclick="previewCheckPdf('${window.checksCache[window.checksCache.length-1]?.id || ''}')" class="px-3 py-1.5 rounded-lg border border-[#C5A059] text-[#C5A059] hover:bg-[#C5A059]/10 font-bold flex items-center gap-1">📄 معاينة</button>
           </div>
         `;
         checksList.prepend(chkDiv);
       }
 
       closeReceiptModal();
-      alert(`✓ تم إصدار سند القبض ${recNum} بنجاح!\n- تم تحديث رصيد كشف الحساب إلى ₪${newBal}\n- تم تسجيل القيد المحاسبي\n${check > 0 ? '- تم إدراج الشيك في محفظة الشيكات بنجاح' : ''}`);
+      showToast(`✅ تم إصدار سند القبض ${recNum} بنجاح! الرصيد الجديد: ₪${Number(newBal).toLocaleString()}`);
     }
 
     function openPurchaseModal() {
@@ -3235,8 +3382,10 @@
 
       <div class="text-xs space-y-3">
         <div class="bg-[#25252D] p-3 rounded-xl border border-[#33333E]">
-          <div class="text-gray-400">العميل: <strong class="text-white">شركة البراق للمقاولات العامة</strong></div>
-          <div class="text-gray-400 mt-1">الرصيد المدين الحالي: <strong class="text-[#FF9800] font-mono">₪ 38,200.00</strong></div>
+          <label class="block text-gray-400 mb-1">اختيار العميل / בחירת לקוח:</label>
+          <select id="receiptCustomerSelect" onchange="onReceiptCustomerChange()" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+          </select>
+          <div class="text-gray-400 mt-1">الرصيد المدين الحالي: <strong id="receiptCurrentBalance" class="text-[#FF9800] font-mono">₪ 0.00</strong></div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
