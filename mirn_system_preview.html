@@ -535,7 +535,32 @@
       <button onclick="switchTab('fleet')" id="tab-fleet" class="tab-btn px-4 py-2.5 rounded-xl font-medium text-gray-300 hover:text-white bg-[#1E1E24] hover:bg-[#25252D] border border-transparent transition flex items-center gap-2">
         <span>🚚</span> <span class="tab-text" data-key="tabFleet">أسطول النقل والشحن</span>
       </button>
+      <button onclick="switchTab('admin')" id="tab-admin" class="hidden tab-btn px-4 py-2.5 rounded-xl font-medium text-[#C5A059] hover:text-black hover:bg-[#C5A059] bg-[#1E1E24] border border-[#C5A059]/40 transition flex items-center gap-2">
+        <span>🛡️</span> <span class="tab-text">لوحة المسؤول / Admin Panel</span>
+      </button>
     </nav>
+
+    <!-- Super Admin Inactive-Page Preview Banner -->
+    <div id="superAdminPreviewBanner" class="hidden bg-amber-500/15 border border-amber-500/40 text-amber-300 rounded-xl px-4 py-2.5 text-xs flex items-center justify-between">
+      <span>⚠️ <strong>معاينة المسؤول (Super Admin Preview):</strong> هذه الصفحة معطلة حالياً للمستخدمين العاديين (أو وضع الصيانة مفعل).</span>
+      <button onclick="switchTab('admin')" class="px-2.5 py-1 rounded-lg bg-amber-500 text-black font-bold text-[11px]">إدارة الصلاحيات</button>
+    </div>
+
+    <!-- LOCKED / INACTIVE PAGE VIEW -->
+    <section id="view-locked" class="hidden">
+      <div class="bg-[#1E1E24] border border-red-500/40 rounded-2xl p-8 md:p-12 text-center max-w-xl mx-auto my-8 shadow-2xl space-y-4">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-red-500/15 border border-red-500/40 flex items-center justify-center text-3xl">🔒</div>
+        <h2 id="lockedPageTitle" class="text-lg font-bold text-white">الصفحة غير متاحة حالياً / Page Unavailable</h2>
+        <p id="lockedMessageText" class="text-sm text-[#C5A059] font-semibold bg-[#25252D] border border-[#33333E] rounded-xl p-4 leading-relaxed">
+          اتصل بالمسؤول لمساعدتك / Call the admin to help you
+        </p>
+        <div id="lockedAdminContact" class="hidden pt-2">
+          <a id="lockedAdminPhoneLink" href="#" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-black font-bold text-xs shadow-lg transition">
+            <span>📞</span> <span id="lockedAdminPhoneText"></span>
+          </a>
+        </div>
+      </div>
+    </section>
 
     <!-- TAB 1: DASHBOARD -->
     <section id="view-dashboard" class="space-y-6">
@@ -1913,17 +1938,166 @@
       document.getElementById('headerSubtitle').textContent = t.headerSubtitle;
     }
 
+    window.currentTab = 'dashboard';
+    window.appAccessConfig = getDefaultAccessConfig();
+
+    const PAGE_LABELS = {
+      dashboard: 'لوحة التحكم / Dashboard',
+      pos: 'كاونتر المبيعات / Sales POS',
+      inventory: 'المستودع والمشتريات / Inventory',
+      statements: 'كشف الحساب / Statements',
+      checks: 'سجل الشيكات / Checks',
+      fleet: 'أسطول النقل / Fleet',
+      admin: 'لوحة المسؤول / Admin Panel'
+    };
+
+    function canAccessPage(pageKey) {
+      const profile = window.currentUserProfile;
+      const cfg = window.appAccessConfig || getDefaultAccessConfig();
+      if (!profile) {
+        return { allowed: false, reason: 'unauthenticated', message: cfg.globalBlockedMessage };
+      }
+      if (profile.role === 'super_admin') {
+        const pageCfg = cfg.pages?.[pageKey];
+        const inactiveForStaff = pageKey !== 'admin' && (cfg.maintenanceMode || (pageCfg && pageCfg.active === false));
+        return { allowed: true, inactiveForStaff };
+      }
+      if (pageKey === 'admin') {
+        return { allowed: false, reason: 'super_admin_only', message: cfg.globalBlockedMessage };
+      }
+      if (cfg.maintenanceMode) {
+        return { allowed: false, reason: 'maintenance', message: cfg.globalBlockedMessage || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you' };
+      }
+      const pageCfg = cfg.pages?.[pageKey];
+      if (!pageCfg || pageCfg.active === false) {
+        return {
+          allowed: false,
+          reason: 'inactive',
+          message: (pageCfg && pageCfg.customMessage) ? pageCfg.customMessage : (cfg.globalBlockedMessage || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you')
+        };
+      }
+      if (!Array.isArray(pageCfg.allowedRoles) || !pageCfg.allowedRoles.includes(profile.role)) {
+        return {
+          allowed: false,
+          reason: 'role_denied',
+          message: (pageCfg && pageCfg.customMessage) ? pageCfg.customMessage : (cfg.globalBlockedMessage || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you')
+        };
+      }
+      return { allowed: true, inactiveForStaff: false };
+    }
+
+    function applyAccessControlToNav() {
+      const profile = window.currentUserProfile;
+      const isSuper = profile?.role === 'super_admin';
+      const adminTab = document.getElementById('tab-admin');
+      if (adminTab) {
+        if (isSuper) adminTab.classList.remove('hidden');
+        else adminTab.classList.add('hidden');
+      }
+
+      ['dashboard', 'pos', 'inventory', 'statements', 'checks', 'fleet'].forEach(p => {
+        const tabEl = document.getElementById('tab-' + p);
+        if (!tabEl) return;
+        const access = canAccessPage(p);
+        // Show lock indicator if blocked for non-super-admin or inactive for staff
+        if (!access.allowed || access.inactiveForStaff) {
+          tabEl.classList.add('opacity-70');
+        } else {
+          tabEl.classList.remove('opacity-70');
+        }
+      });
+
+      if (window.currentTab) {
+        switchTab(window.currentTab);
+      }
+    }
+
+    function startAccessListeners(uid) {
+      if (window._userUnsub) { window._userUnsub(); window._userUnsub = null; }
+      if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
+
+      window._userUnsub = window.mirnDb.collection('users').doc(uid).onSnapshot(async (doc) => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        if (data.active !== true || data.removed === true) {
+          showLoginError('تم إيقاف حسابك من قبل المسؤول / Your account has been disabled.');
+          await handleLogout();
+          return;
+        }
+        window.currentUserProfile = data;
+        updateHeaderForUser(data);
+        applyAccessControlToNav();
+      }, (err) => console.warn('User snapshot error:', err.message));
+
+      window._configUnsub = window.mirnDb.collection('app_config').doc('access_control').onSnapshot((doc) => {
+        if (doc.exists) {
+          window.appAccessConfig = { ...getDefaultAccessConfig(), ...doc.data() };
+        } else {
+          window.appAccessConfig = getDefaultAccessConfig();
+        }
+        applyAccessControlToNav();
+        if (window.currentTab === 'admin' && typeof renderAdminPageControls === 'function') {
+          renderAdminPageControls();
+        }
+      }, (err) => console.warn('Config snapshot error:', err.message));
+    }
+
     function switchTab(tab) {
-      ['dashboard', 'pos', 'inventory', 'statements', 'checks', 'fleet'].forEach(t => {
+      window.currentTab = tab;
+      ['dashboard', 'pos', 'inventory', 'statements', 'checks', 'fleet', 'admin', 'locked'].forEach(t => {
         const viewEl = document.getElementById('view-' + t);
         if (viewEl) viewEl.classList.add('hidden');
         const tabEl = document.getElementById('tab-' + t);
-        if (tabEl) tabEl.className = 'tab-btn px-4 py-2.5 rounded-xl font-medium text-gray-300 hover:text-white bg-[#1E1E24] hover:bg-[#25252D] border border-transparent transition flex items-center gap-2';
+        if (tabEl) {
+          if (t === 'admin') {
+            tabEl.className = (window.currentUserProfile?.role === 'super_admin' ? '' : 'hidden ') + 'tab-btn px-4 py-2.5 rounded-xl font-medium text-[#C5A059] hover:text-black hover:bg-[#C5A059] bg-[#1E1E24] border border-[#C5A059]/40 transition flex items-center gap-2';
+          } else {
+            tabEl.className = 'tab-btn px-4 py-2.5 rounded-xl font-medium text-gray-300 hover:text-white bg-[#1E1E24] hover:bg-[#25252D] border border-transparent transition flex items-center gap-2';
+          }
+        }
       });
+
+      const access = canAccessPage(tab);
+      const previewBanner = document.getElementById('superAdminPreviewBanner');
+
+      if (!access.allowed) {
+        if (previewBanner) previewBanner.classList.add('hidden');
+        const lockedView = document.getElementById('view-locked');
+        if (lockedView) lockedView.classList.remove('hidden');
+        const titleEl = document.getElementById('lockedPageTitle');
+        if (titleEl) titleEl.textContent = (PAGE_LABELS[tab] || tab) + ' — غير متاحة';
+        const msgEl = document.getElementById('lockedMessageText');
+        if (msgEl) msgEl.textContent = access.message || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you';
+
+        const phone = (window.appAccessConfig?.adminPhone || '').trim();
+        const contactWrap = document.getElementById('lockedAdminContact');
+        const phoneLink = document.getElementById('lockedAdminPhoneLink');
+        const phoneText = document.getElementById('lockedAdminPhoneText');
+        if (phone && contactWrap && phoneLink && phoneText) {
+          phoneLink.href = 'tel:' + phone.replace(/\s+/g, '');
+          phoneText.textContent = 'تواصل مع المسؤول: ' + phone;
+          contactWrap.classList.remove('hidden');
+        } else if (contactWrap) {
+          contactWrap.classList.add('hidden');
+        }
+        return;
+      }
+
+      if (previewBanner) {
+        if (access.inactiveForStaff) previewBanner.classList.remove('hidden');
+        else previewBanner.classList.add('hidden');
+      }
+
       const activeView = document.getElementById('view-' + tab);
       if (activeView) activeView.classList.remove('hidden');
       const activeTab = document.getElementById('tab-' + tab);
       if (activeTab) activeTab.className = 'tab-btn px-4 py-2.5 rounded-xl font-semibold bg-[#C5A059] text-black transition flex items-center gap-2';
+
+      if (tab === 'admin') {
+        if (typeof loadAdminUsers === 'function') loadAdminUsers();
+        if (typeof renderAdminPageControls === 'function') renderAdminPageControls();
+        if (typeof loadAdminAuditLogs === 'function') loadAdminAuditLogs();
+      }
     }
 
     function toggleVatMode() {
