@@ -10,7 +10,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script>
-    // Firebase singleton init
+    // Firebase singleton init (Email/Password Auth Gate)
+    window.SUPER_ADMIN_EMAIL = 'dia81994@gmail.com';
+    window.currentUserProfile = null;
+
     (function() {
       const cfg = {
         apiKey: "AIzaSyCgIRRJ1JUrevIS8JDBzVHuF5XmSCAsZxU",
@@ -20,17 +23,22 @@
         messagingSenderId: "567114559597",
         appId: "1:567114559597:web:8908dad67f7f10be854f64",
       };
+      window.mirnFirebaseConfig = cfg;
       if (!firebase.apps.length) firebase.initializeApp(cfg);
       window.mirnDb = firebase.firestore();
       window.mirnAuth = firebase.auth();
-      window._authReady = window.mirnAuth.signInAnonymously()
-        .then(() => console.log('✓ Firebase Anonymous Auth OK'))
-        .catch(err => console.error('Auth failed:', err));
+      window._resolveAuthReady = null;
+      window._authReady = new Promise((resolve) => {
+        window._resolveAuthReady = resolve;
+      });
     })();
 
     async function withAuth(fn) {
       try {
         await window._authReady;
+        if (!window.mirnAuth.currentUser || !window.currentUserProfile || !window.currentUserProfile.active) {
+          throw new Error('يرجى تسجيل الدخول أولاً / Please sign in first');
+        }
         return await fn(window.mirnDb);
       } catch (err) {
         console.error('Firestore operation failed:', err);
@@ -436,6 +444,40 @@
   </style>
 </head>
 <body class="min-h-screen p-4 md:p-6 antialiased">
+  <!-- LOGIN GATE VIEW -->
+  <div id="loginView" class="min-h-[85vh] flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-[#1E1E24] border border-[#C5A059]/50 rounded-2xl p-6 md:p-8 shadow-2xl space-y-6">
+      <div class="text-center space-y-2">
+        <div class="inline-block bg-[#C5A059] text-black font-extrabold px-4 py-1.5 rounded-xl text-xl tracking-wider shadow-md">
+          M.I.R.N POWER
+        </div>
+        <h2 class="text-lg font-bold text-white mt-2">تسجيل الدخول للنظام / System Login</h2>
+        <p class="text-xs text-gray-400">الدخول مقتصر على الحسابات المعتمدة من مدير النظام فقط</p>
+      </div>
+
+      <div id="loginError" class="hidden p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-medium"></div>
+
+      <form onsubmit="handleLoginSubmit(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block text-gray-300 mb-1.5 font-semibold">البريد الإلكتروني / Email</label>
+          <input type="email" id="loginEmail" required placeholder="user@example.com" class="w-full bg-[#25252D] border border-[#33333E] focus:border-[#C5A059] rounded-xl px-3.5 py-2.5 text-white outline-none transition" dir="ltr">
+        </div>
+        <div>
+          <label class="block text-gray-300 mb-1.5 font-semibold">كلمة المرور / Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full bg-[#25252D] border border-[#33333E] focus:border-[#C5A059] rounded-xl px-3.5 py-2.5 text-white outline-none transition" dir="ltr">
+        </div>
+        <button type="submit" id="btnLoginSubmit" class="w-full py-3 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-black font-bold text-sm shadow-lg transition flex items-center justify-center gap-2">
+          <span>🔐</span> <span>دخول / Sign In</span>
+        </button>
+      </form>
+      <div class="text-center text-[11px] text-gray-500 border-t border-[#33333E] pt-3">
+        M.I.R.N POWER Management System • Admin-Managed Access Only
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP SHELL (Hidden until authenticated & active) -->
+  <div id="appShell" class="hidden">
   <div class="max-w-7xl mx-auto space-y-6">
 
     <!-- Header & Brand Bar -->
@@ -454,15 +496,12 @@
 
       <!-- User RBAC & Language Badges -->
       <div class="flex items-center flex-wrap gap-2 sm:gap-3">
-        <!-- User RBAC Selector -->
-        <div class="flex items-center gap-2 bg-[#25252D] border border-[#C5A059]/40 rounded-xl px-2.5 py-1 text-xs">
+        <!-- Authenticated User Badge & Logout -->
+        <div class="flex items-center gap-2 bg-[#25252D] border border-[#C5A059]/40 rounded-xl px-3 py-1.5 text-xs">
           <span class="text-[#C5A059] font-bold">👤</span>
-          <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-transparent text-gray-200 text-xs font-semibold focus:outline-none cursor-pointer">
-            <option value="admin" class="bg-[#1E1E24] text-white">ضياء الدين (مدير النظام - Admin)</option>
-            <option value="accountant" class="bg-[#1E1E24] text-white">أحمد النتشة (محاسب مالي - Accountant)</option>
-            <option value="cashier" class="bg-[#1E1E24] text-white">سامح الجعبري (كاشير مبيعات - Cashier)</option>
-            <option value="dispatcher" class="bg-[#1E1E24] text-white">خليل بركات (سيدر نقليات - Dispatcher)</option>
-          </select>
+          <span id="headerUserName" class="text-white font-semibold">...</span>
+          <span id="headerUserRoleBadge" class="px-2 py-0.5 rounded bg-[#C5A059]/20 text-[#C5A059] text-[10px] font-bold uppercase">-</span>
+          <button onclick="handleLogout()" class="mr-1 px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10px] font-bold transition">خروج</button>
         </div>
         <div class="flex items-center bg-[#25252D] border border-[#33333E] rounded-xl p-1 text-xs">
           <button onclick="setLang('ar')" id="btnAr" class="px-3 py-1 rounded-lg font-semibold bg-[#C5A059] text-black transition">العربية</button>
@@ -1486,6 +1525,7 @@
     </section>
 
   </div>
+  </div><!-- /#appShell -->
 
   <!-- Interactive Logic Script -->
     <!-- MODAL: ADD PRODUCT TO CATALOG -->
@@ -4089,7 +4129,189 @@
       });
     }
 
-    loadFirestoreData().catch(err => console.log('Offline mode — using hardcoded data:', err.message));
+    // --- AUTH GATE, SUPER ADMIN BOOTSTRAP & AUDIT LOGGING ---
+    window._userUnsub = null;
+    window._configUnsub = null;
+
+    function showLoginError(msg) {
+      const errBox = document.getElementById('loginError');
+      if (!errBox) return;
+      if (msg) {
+        errBox.textContent = msg;
+        errBox.classList.remove('hidden');
+      } else {
+        errBox.textContent = '';
+        errBox.classList.add('hidden');
+      }
+    }
+
+    async function writeAuditLog(action, target, details) {
+      try {
+        const user = window.mirnAuth.currentUser;
+        if (!user) return;
+        await window.mirnDb.collection('audit_logs').add({
+          action: action || 'event',
+          actorUid: user.uid,
+          actorEmail: user.email || '',
+          target: target || '',
+          details: details || '',
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {
+        console.warn('Audit log skipped:', e.message);
+      }
+    }
+
+    function getDefaultAccessConfig() {
+      return {
+        maintenanceMode: false,
+        globalBlockedMessage: 'اتصل بالمسؤول لمساعدتك / Call the admin to help you',
+        adminPhone: '',
+        pages: {
+          dashboard: { active: true, allowedRoles: ['manager', 'sales', 'accountant', 'warehouse', 'driver'], customMessage: '' },
+          pos: { active: true, allowedRoles: ['manager', 'sales'], customMessage: '' },
+          inventory: { active: true, allowedRoles: ['manager', 'warehouse', 'accountant'], customMessage: '' },
+          statements: { active: true, allowedRoles: ['manager', 'accountant', 'sales'], customMessage: '' },
+          checks: { active: true, allowedRoles: ['manager', 'accountant'], customMessage: '' },
+          fleet: { active: true, allowedRoles: ['manager', 'driver', 'warehouse'], customMessage: '' }
+        }
+      };
+    }
+
+    async function bootstrapSuperAdminIfNeeded(user) {
+      const db = window.mirnDb;
+      const userRef = db.collection('users').doc(user.uid);
+      const userSnap = await userRef.get();
+
+      if (!userSnap.exists) {
+        if ((user.email || '').toLowerCase() === window.SUPER_ADMIN_EMAIL.toLowerCase()) {
+          const profile = {
+            uid: user.uid,
+            name: 'Super Admin',
+            email: user.email,
+            role: 'super_admin',
+            active: true,
+            removed: false,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          await userRef.set(profile);
+          const cfgRef = db.collection('app_config').doc('access_control');
+          const cfgSnap = await cfgRef.get();
+          if (!cfgSnap.exists) {
+            await cfgRef.set({
+              ...getDefaultAccessConfig(),
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+          return profile;
+        }
+        return null;
+      }
+
+      const data = userSnap.data();
+      // Ensure super_admin also initializes app_config if missing
+      if (data.role === 'super_admin') {
+        const cfgRef = db.collection('app_config').doc('access_control');
+        const cfgSnap = await cfgRef.get();
+        if (!cfgSnap.exists) {
+          await cfgRef.set({
+            ...getDefaultAccessConfig(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      }
+      return data;
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      showLoginError('');
+      const email = (document.getElementById('loginEmail')?.value || '').trim();
+      const pass = document.getElementById('loginPassword')?.value || '';
+      const btn = document.getElementById('btnLoginSubmit');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> <span>جارِ التحقق...</span>';
+      }
+      try {
+        await window.mirnAuth.signInWithEmailAndPassword(email, pass);
+      } catch (err) {
+        console.error('Login failed:', err);
+        showLoginError('فشل تسجيل الدخول: ' + (err.message || 'تأكد من البريد الإلكتروني وكلمة المرور'));
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🔐</span> <span>دخول / Sign In</span>';
+        }
+      }
+    }
+
+    async function handleLogout() {
+      if (window._userUnsub) { window._userUnsub(); window._userUnsub = null; }
+      if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
+      window.currentUserProfile = null;
+      await window.mirnAuth.signOut();
+      showToast('تم تسجيل الخروج بنجاح');
+    }
+
+    function updateHeaderForUser(profile) {
+      const nameEl = document.getElementById('headerUserName');
+      const roleEl = document.getElementById('headerUserRoleBadge');
+      const adminTab = document.getElementById('tab-admin');
+      if (nameEl) nameEl.textContent = profile.name || profile.email;
+      if (roleEl) roleEl.textContent = profile.role === 'super_admin' ? 'SUPER ADMIN' : (profile.role || 'staff').toUpperCase();
+      if (adminTab) {
+        if (profile.role === 'super_admin') adminTab.classList.remove('hidden');
+        else adminTab.classList.add('hidden');
+      }
+    }
+
+    function initAuthGate() {
+      window.mirnAuth.onAuthStateChanged(async (user) => {
+        const loginView = document.getElementById('loginView');
+        const appShell = document.getElementById('appShell');
+
+        if (!user) {
+          window.currentUserProfile = null;
+          if (window._userUnsub) { window._userUnsub(); window._userUnsub = null; }
+          if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
+          if (appShell) appShell.classList.add('hidden');
+          if (loginView) loginView.classList.remove('hidden');
+          return;
+        }
+
+        try {
+          const profile = await bootstrapSuperAdminIfNeeded(user);
+          if (!profile || profile.active !== true || profile.removed === true) {
+            await window.mirnAuth.signOut();
+            showLoginError('الحساب غير مفعل أو تم إيقافه — تواصل مع مسؤول النظام / Account disabled or unauthorized.');
+            return;
+          }
+
+          window.currentUserProfile = profile;
+          if (typeof window._resolveAuthReady === 'function') {
+            window._resolveAuthReady();
+          }
+
+          updateHeaderForUser(profile);
+          if (loginView) loginView.classList.add('hidden');
+          if (appShell) appShell.classList.remove('hidden');
+
+          if (typeof startAccessListeners === 'function') {
+            startAccessListeners(user.uid);
+          }
+          await loadFirestoreData().catch(err => console.warn('Firestore data load:', err.message));
+          writeAuditLog('login', user.email, 'User signed in (' + profile.role + ')');
+        } catch (err) {
+          console.error('Auth state verification error:', err);
+          showLoginError('تعذر التحقق من صلاحيات الحساب: ' + err.message);
+          await window.mirnAuth.signOut();
+        }
+      });
+    }
+
+    initAuthGate();
   </script>
 
   <!-- New Receipt Modal -->
