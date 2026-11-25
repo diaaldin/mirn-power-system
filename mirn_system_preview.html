@@ -1549,6 +1549,144 @@
       </div>
     </section>
 
+    <!-- TAB 7: SUPER ADMIN PANEL (Exclusive to super_admin) -->
+    <section id="view-admin" class="hidden space-y-6">
+      <!-- 1. User Management -->
+      <div class="bg-[#1E1E24] border border-[#C5A059]/40 rounded-2xl p-5 shadow-lg space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#33333E] pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span>🛡️</span> <span>إدارة المستخدمين والصلاحيات / User Management</span>
+            </h2>
+            <p class="text-xs text-gray-400">إضافة موظفين بكلمات مرور وأدوار، تعطيل أو إزالة الحسابات، وإرسال إعادة تعيين كلمة المرور</p>
+          </div>
+          <span class="px-3 py-1 rounded-xl bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#C5A059] text-xs font-bold">Super Admin Only</span>
+        </div>
+
+        <!-- Add User Form -->
+        <div class="bg-[#25252D] border border-[#33333E] rounded-xl p-4 space-y-3">
+          <h3 class="text-xs font-bold text-[#C5A059]">➕ إضافة مستخدم جديد / Add New Staff User</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+            <div>
+              <label class="block text-gray-400 mb-1">الاسم الكامل / Name *</label>
+              <input type="text" id="adminNewUserName" placeholder="مثال: أحمد محمد" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+            </div>
+            <div>
+              <label class="block text-gray-400 mb-1">البريد الإلكتروني / Email *</label>
+              <input type="email" id="adminNewUserEmail" placeholder="staff@mirn.com" dir="ltr" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+            </div>
+            <div>
+              <label class="block text-gray-400 mb-1">كلمة المرور / Password *</label>
+              <input type="password" id="adminNewUserPassword" placeholder="6 أحرف فأكثر" dir="ltr" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+            </div>
+            <div>
+              <label class="block text-gray-400 mb-1">الدور / Role *</label>
+              <select id="adminNewUserRole" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+                <option value="manager">مدير / Manager</option>
+                <option value="sales">مبيعات / Sales</option>
+                <option value="accountant">محاسب / Accountant</option>
+                <option value="warehouse">مستودع / Warehouse</option>
+                <option value="driver">سائق / Driver</option>
+              </select>
+            </div>
+            <div class="flex items-end">
+              <button id="btnAdminCreateUser" onclick="adminCreateUser()" class="w-full py-2 px-4 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-black font-bold transition shadow-lg">
+                ✓ إنشاء المستخدم
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-right border-collapse">
+            <thead>
+              <tr class="border-b border-[#33333E] text-gray-400">
+                <th class="py-2.5 px-3">الاسم</th>
+                <th class="py-2.5 px-3">البريد الإلكتروني</th>
+                <th class="py-2.5 px-3">الدور</th>
+                <th class="py-2.5 px-3">الحالة</th>
+                <th class="py-2.5 px-3 text-center">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersTableBody" class="divide-y divide-[#33333E]">
+              <tr><td colspan="5" class="py-4 text-center text-gray-500">جارِ تحميل المستخدمين...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 2. Page Controls, Maintenance Mode & Custom Blocked Message -->
+      <div class="bg-[#1E1E24] border border-[#33333E] rounded-2xl p-5 shadow-lg space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#33333E] pb-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span>🎛️</span> <span>التحكم بالصفحات ورسالة الإغلاق / Page Access & Maintenance</span>
+            </h2>
+            <p class="text-xs text-gray-400">تفعيل أو تعطيل أي صفحة، تحديد الأدوار المسموح لها، وتخصيص رسالة "اتصل بالمسؤول"</p>
+          </div>
+          <button onclick="saveAdminAccessConfig()" class="px-4 py-2 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-black font-bold text-xs shadow-lg transition">
+            💾 حفظ إعدادات الصفحات
+          </button>
+        </div>
+
+        <!-- Global Maintenance & Message -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs bg-[#25252D] border border-[#33333E] rounded-xl p-4">
+          <div class="flex items-center justify-between bg-[#1E1E24] border border-[#33333E] rounded-xl p-3">
+            <div>
+              <div class="font-bold text-white">وضع الصيانة الشامل (Kill Switch)</div>
+              <div class="text-[11px] text-gray-400">إغلاق جميع الصفحات مؤقتاً أمام جميع الموظفين</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="adminMaintenanceToggle" class="sr-only peer">
+              <div class="w-10 h-5 bg-gray-600 rounded-full peer peer-checked:bg-red-500 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full"></div>
+            </label>
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1">رسالة الإغلاق الافتراضية / Default Locked Message</label>
+            <input type="text" id="adminGlobalBlockedMsg" placeholder="اتصل بالمسؤول لمساعدتك / Call the admin to help you" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1">رقم تواصل المسؤول / Admin Phone (اختياري)</label>
+            <input type="text" id="adminSupportPhone" placeholder="050-0000000" dir="ltr" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-2 text-white outline-none focus:border-[#C5A059]">
+          </div>
+        </div>
+
+        <!-- Per-page Controls Matrix -->
+        <div id="adminPagesControlList" class="space-y-3 text-xs">
+          <!-- Populated dynamically by renderAdminPageControls() -->
+        </div>
+      </div>
+
+      <!-- 3. Audit Log -->
+      <div class="bg-[#1E1E24] border border-[#33333E] rounded-2xl p-5 shadow-lg space-y-4">
+        <div class="flex items-center justify-between border-b border-[#33333E] pb-3">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span>📜</span> <span>سجل النشاطات / Audit Log</span>
+          </h2>
+          <button onclick="loadAdminAuditLogs()" class="px-3 py-1.5 rounded-xl bg-[#25252D] hover:bg-[#33333E] text-gray-200 text-xs font-semibold transition">
+            🔄 تحديث السجل
+          </button>
+        </div>
+        <div class="overflow-x-auto max-h-72 overflow-y-auto">
+          <table class="w-full text-xs text-right border-collapse">
+            <thead>
+              <tr class="border-b border-[#33333E] text-gray-400">
+                <th class="py-2 px-3">الوقت</th>
+                <th class="py-2 px-3">المستخدم</th>
+                <th class="py-2 px-3">الإجراء</th>
+                <th class="py-2 px-3">الهدف</th>
+                <th class="py-2 px-3">التفاصيل</th>
+              </tr>
+            </thead>
+            <tbody id="adminAuditLogsBody" class="divide-y divide-[#33333E]">
+              <tr><td colspan="5" class="py-4 text-center text-gray-500">لا توجد سجلات بعد</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
   </div>
   </div><!-- /#appShell -->
 
@@ -4483,6 +4621,298 @@
           await window.mirnAuth.signOut();
         }
       });
+    }
+
+    // --- SUPER ADMIN PANEL LOGIC (USER MANAGEMENT, PAGE CONTROLS, AUDIT LOG) ---
+    const STAFF_ROLE_LIST = [
+      { value: 'manager', label: 'مدير / Manager' },
+      { value: 'sales', label: 'مبيعات / Sales' },
+      { value: 'accountant', label: 'محاسب / Accountant' },
+      { value: 'warehouse', label: 'مستودع / Warehouse' },
+      { value: 'driver', label: 'سائق / Driver' }
+    ];
+
+    function requireSuperAdmin() {
+      if (!window.currentUserProfile || window.currentUserProfile.role !== 'super_admin') {
+        showToast('⛔ غير مصرح: هذه العملية متاحة لمدير النظام فقط');
+        return false;
+      }
+      return true;
+    }
+
+    async function loadAdminUsers() {
+      if (!requireSuperAdmin()) return;
+      const tbody = document.getElementById('adminUsersTableBody');
+      if (!tbody) return;
+      try {
+        const snap = await window.mirnDb.collection('users').get();
+        const rows = [];
+        snap.forEach(doc => {
+          const u = doc.data();
+          u.uid = doc.id;
+          if (!u.removed) rows.push(u);
+        });
+        rows.sort((a, b) => (a.role === 'super_admin' ? -1 : b.role === 'super_admin' ? 1 : (a.name || '').localeCompare(b.name || '')));
+
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">لا يوجد مستخدمون مسجلون</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(u => {
+          const isSuper = u.role === 'super_admin';
+          const roleOptions = STAFF_ROLE_LIST.map(r =>
+            `<option value="${r.value}" ${u.role === r.value ? 'selected' : ''}>${r.label}</option>`
+          ).join('');
+          const statusBadge = u.active
+            ? '<span class="px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-bold">نشط / Active</span>'
+            : '<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold">معطل / Disabled</span>';
+
+          return `
+            <tr>
+              <td class="py-2.5 px-3 font-bold text-white">${u.name || '-'}</td>
+              <td class="py-2.5 px-3 font-mono text-gray-300" dir="ltr">${u.email || '-'}</td>
+              <td class="py-2.5 px-3">
+                ${isSuper
+                  ? '<span class="px-2.5 py-1 rounded bg-[#C5A059]/20 text-[#C5A059] font-bold">SUPER ADMIN</span>'
+                  : `<select onchange="adminUpdateUserRole('${u.uid}', this.value)" class="bg-[#25252D] border border-[#33333E] rounded-lg px-2 py-1 text-white text-xs outline-none">${roleOptions}</select>`}
+              </td>
+              <td class="py-2.5 px-3">${statusBadge}</td>
+              <td class="py-2.5 px-3 text-center">
+                ${isSuper
+                  ? '<span class="text-gray-500 text-[11px]">محمي</span>'
+                  : `<div class="flex items-center justify-center gap-1.5 flex-wrap">
+                      <button onclick="adminToggleUserActive('${u.uid}', ${!u.active})" class="px-2.5 py-1 rounded-lg ${u.active ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'} font-semibold text-[11px]">
+                        ${u.active ? 'تعطيل' : 'تفعيل'}
+                      </button>
+                      <button onclick="adminSendPasswordReset('${u.email}')" class="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-semibold text-[11px]">
+                        🔑 إعادة كلمة مرور
+                      </button>
+                      <button onclick="adminSoftRemoveUser('${u.uid}', '${u.email}')" class="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-[11px]">
+                        🗑️ إزالة
+                      </button>
+                    </div>`}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('loadAdminUsers error:', err);
+        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-red-400">خطأ في تحميل المستخدمين: ' + err.message + '</td></tr>';
+      }
+    }
+
+    async function adminCreateUser() {
+      if (!requireSuperAdmin()) return;
+      const name = (document.getElementById('adminNewUserName')?.value || '').trim();
+      const email = (document.getElementById('adminNewUserEmail')?.value || '').trim();
+      const password = document.getElementById('adminNewUserPassword')?.value || '';
+      const role = document.getElementById('adminNewUserRole')?.value || 'sales';
+
+      if (!name || !email || password.length < 6) {
+        alert('يرجى إدخال الاسم، البريد الإلكتروني، وكلمة مرور لا تقل عن 6 أحرف');
+        return;
+      }
+      if (role === 'super_admin') {
+        alert('لا يمكن إنشاء حساب بدور Super Admin');
+        return;
+      }
+
+      const btn = document.getElementById('btnAdminCreateUser');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ جارِ الإنشاء...'; }
+
+      const secondaryApp = firebase.apps.find(a => a.name === 'SecondaryAdminApp')
+        || firebase.initializeApp(window.mirnFirebaseConfig, 'SecondaryAdminApp');
+
+      try {
+        const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+        const uid = cred.user.uid;
+        await window.mirnDb.collection('users').doc(uid).set({
+          uid,
+          name,
+          email,
+          role,
+          active: true,
+          removed: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await writeAuditLog('user_created', email, `Created user ${name} (${role})`);
+        document.getElementById('adminNewUserName').value = '';
+        document.getElementById('adminNewUserEmail').value = '';
+        document.getElementById('adminNewUserPassword').value = '';
+        showToast('✅ تم إنشاء المستخدم ' + name + ' بنجاح!');
+        await loadAdminUsers();
+      } catch (err) {
+        console.error('adminCreateUser error:', err);
+        showToast('❌ فشل إنشاء المستخدم: ' + err.message);
+      } finally {
+        await secondaryApp.auth().signOut().catch(() => {});
+        if (btn) { btn.disabled = false; btn.textContent = '✓ إنشاء المستخدم'; }
+      }
+    }
+
+    async function adminUpdateUserRole(uid, newRole) {
+      if (!requireSuperAdmin() || newRole === 'super_admin') return;
+      try {
+        await window.mirnDb.collection('users').doc(uid).update({
+          role: newRole,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await writeAuditLog('user_role_changed', uid, 'New role: ' + newRole);
+        showToast('✅ تم تحديث دور المستخدم إلى: ' + newRole);
+      } catch (err) {
+        showToast('❌ خطأ في تحديث الدور: ' + err.message);
+      }
+    }
+
+    async function adminToggleUserActive(uid, nextActive) {
+      if (!requireSuperAdmin()) return;
+      try {
+        await window.mirnDb.collection('users').doc(uid).update({
+          active: !!nextActive,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await writeAuditLog(nextActive ? 'user_enabled' : 'user_disabled', uid, 'active=' + !!nextActive);
+        showToast(nextActive ? '✅ تم تفعيل الحساب' : '⛔ تم تعطيل الحساب فوراً');
+        await loadAdminUsers();
+      } catch (err) {
+        showToast('❌ خطأ في تغيير حالة المستخدم: ' + err.message);
+      }
+    }
+
+    async function adminSendPasswordReset(email) {
+      if (!requireSuperAdmin() || !email) return;
+      try {
+        await window.mirnAuth.sendPasswordResetEmail(email);
+        await writeAuditLog('password_reset_sent', email, 'Sent Firebase password reset email');
+        showToast('📧 تم إرسال رابط تغيير كلمة المرور إلى ' + email);
+      } catch (err) {
+        showToast('❌ فشل إرسال رابط كلمة المرور: ' + err.message);
+      }
+    }
+
+    async function adminSoftRemoveUser(uid, email) {
+      if (!requireSuperAdmin()) return;
+      if (!confirm(`هل أنت متأكد من إزالة المستخدم ${email}؟ سيتم منعه من الدخول نهائياً مع الاحتفاظ بسجل الفواتير.`)) return;
+      try {
+        await window.mirnDb.collection('users').doc(uid).update({
+          active: false,
+          removed: true,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await writeAuditLog('user_removed', email, 'Soft-removed user uid=' + uid);
+        showToast('🗑️ تمت إزالة المستخدم وإيقاف وصوله');
+        await loadAdminUsers();
+      } catch (err) {
+        showToast('❌ خطأ في إزالة المستخدم: ' + err.message);
+      }
+    }
+
+    function renderAdminPageControls() {
+      const cfg = window.appAccessConfig || getDefaultAccessConfig();
+      const maintEl = document.getElementById('adminMaintenanceToggle');
+      const msgEl = document.getElementById('adminGlobalBlockedMsg');
+      const phoneEl = document.getElementById('adminSupportPhone');
+      if (maintEl) maintEl.checked = !!cfg.maintenanceMode;
+      if (msgEl) msgEl.value = cfg.globalBlockedMessage || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you';
+      if (phoneEl) phoneEl.value = cfg.adminPhone || '';
+
+      const listEl = document.getElementById('adminPagesControlList');
+      if (!listEl) return;
+
+      const pageKeys = ['dashboard', 'pos', 'inventory', 'statements', 'checks', 'fleet'];
+      listEl.innerHTML = pageKeys.map(key => {
+        const p = cfg.pages?.[key] || { active: true, allowedRoles: STAFF_ROLE_LIST.map(r => r.value), customMessage: '' };
+        const roleChecks = STAFF_ROLE_LIST.map(r => {
+          const checked = Array.isArray(p.allowedRoles) && p.allowedRoles.includes(r.value) ? 'checked' : '';
+          return `
+            <label class="inline-flex items-center gap-1.5 bg-[#1E1E24] border border-[#33333E] px-2 py-1 rounded-lg cursor-pointer">
+              <input type="checkbox" class="admin-page-role-${key} accent-[#C5A059]" value="${r.value}" ${checked}>
+              <span class="text-gray-300 text-[11px]">${r.label}</span>
+            </label>
+          `;
+        }).join('');
+
+        return `
+          <div class="bg-[#25252D] border border-[#33333E] rounded-xl p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="font-bold text-white text-sm">${PAGE_LABELS[key] || key}</div>
+              <label class="inline-flex items-center gap-2 cursor-pointer">
+                <span class="text-[11px] font-semibold ${p.active ? 'text-green-400' : 'text-red-400'}">${p.active ? 'مفعّلة / Active' : 'معطّلة / Inactive'}</span>
+                <input type="checkbox" id="adminPageActive-${key}" ${p.active ? 'checked' : ''} class="sr-only peer">
+                <div class="relative w-10 h-5 bg-gray-600 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full"></div>
+              </label>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+              <span class="text-gray-400 text-[11px] ml-2">الأدوار المسموحة:</span>
+              ${roleChecks}
+            </div>
+            <div>
+              <input type="text" id="adminPageCustomMsg-${key}" value="${(p.customMessage || '').replace(/"/g, '&quot;')}" placeholder="رسالة مخصصة لهذه الصفحة عند تعطيلها (اختياري — إذا تركت فارغة تظهر الرسالة الافتراضية)" class="w-full bg-[#1E1E24] border border-[#33333E] rounded-xl px-3 py-1.5 text-white text-xs outline-none focus:border-[#C5A059]">
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function saveAdminAccessConfig() {
+      if (!requireSuperAdmin()) return;
+      const pageKeys = ['dashboard', 'pos', 'inventory', 'statements', 'checks', 'fleet'];
+      const pages = {};
+      pageKeys.forEach(key => {
+        const active = !!document.getElementById('adminPageActive-' + key)?.checked;
+        const allowedRoles = Array.from(document.querySelectorAll('.admin-page-role-' + key + ':checked')).map(cb => cb.value);
+        const customMessage = (document.getElementById('adminPageCustomMsg-' + key)?.value || '').trim();
+        pages[key] = { active, allowedRoles, customMessage };
+      });
+
+      const newCfg = {
+        maintenanceMode: !!document.getElementById('adminMaintenanceToggle')?.checked,
+        globalBlockedMessage: (document.getElementById('adminGlobalBlockedMsg')?.value || '').trim() || 'اتصل بالمسؤول لمساعدتك / Call the admin to help you',
+        adminPhone: (document.getElementById('adminSupportPhone')?.value || '').trim(),
+        pages,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      try {
+        await window.mirnDb.collection('app_config').doc('access_control').set(newCfg, { merge: true });
+        await writeAuditLog('access_config_updated', 'app_config/access_control', 'Updated page toggles & messages');
+        showToast('✅ تم حفظ إعدادات الصفحات والرسائل وتطبيقها فوراً!');
+      } catch (err) {
+        showToast('❌ فشل حفظ الإعدادات: ' + err.message);
+      }
+    }
+
+    async function loadAdminAuditLogs() {
+      if (!requireSuperAdmin()) return;
+      const tbody = document.getElementById('adminAuditLogsBody');
+      if (!tbody) return;
+      try {
+        const snap = await window.mirnDb.collection('audit_logs').orderBy('timestamp', 'desc').limit(50).get();
+        if (snap.empty) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">لا توجد سجلات نشاط بعد</td></tr>';
+          return;
+        }
+        const rows = [];
+        snap.forEach(doc => {
+          const l = doc.data();
+          const dt = l.timestamp && l.timestamp.toDate ? l.timestamp.toDate().toLocaleString() : '-';
+          rows.push(`
+            <tr>
+              <td class="py-2 px-3 font-mono text-gray-400 text-[11px]">${dt}</td>
+              <td class="py-2 px-3 font-mono text-gray-300" dir="ltr">${l.actorEmail || '-'}</td>
+              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-[#C5A059]/15 text-[#C5A059] font-mono text-[10px]">${l.action || '-'}</span></td>
+              <td class="py-2 px-3 text-white font-mono text-[11px]">${l.target || '-'}</td>
+              <td class="py-2 px-3 text-gray-300">${l.details || '-'}</td>
+            </tr>
+          `);
+        });
+        tbody.innerHTML = rows.join('');
+      } catch (err) {
+        console.warn('loadAdminAuditLogs error:', err);
+        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-red-400">تعذر تحميل السجل: ' + err.message + '</td></tr>';
+      }
     }
 
     initAuthGate();
