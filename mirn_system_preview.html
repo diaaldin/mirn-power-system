@@ -2137,7 +2137,6 @@
         const tabEl = document.getElementById('tab-' + p);
         if (!tabEl) return;
         const access = canAccessPage(p);
-        // Show lock indicator if blocked for non-super-admin or inactive for staff
         if (!access.allowed || access.inactiveForStaff) {
           tabEl.classList.add('opacity-70');
         } else {
@@ -2145,7 +2144,7 @@
         }
       });
 
-      if (window.currentTab) {
+      if (window.currentTab && window.currentTab !== 'admin') {
         switchTab(window.currentTab);
       }
     }
@@ -2155,11 +2154,15 @@
       if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
 
       window._userUnsub = window.mirnDb.collection('users').doc(uid).onSnapshot(async (doc) => {
-        if (!doc.exists) return;
+        if (!doc.exists) {
+          showLoginError('تم حذف ملف حسابك — تواصل مع المسؤول / Your account record was removed.');
+          await handleLogout(true);
+          return;
+        }
         const data = doc.data();
         if (data.active !== true || data.removed === true) {
           showLoginError('تم إيقاف حسابك من قبل المسؤول / Your account has been disabled.');
-          await handleLogout();
+          await handleLogout(true);
           return;
         }
         window.currentUserProfile = data;
@@ -2169,15 +2172,34 @@
 
       window._configUnsub = window.mirnDb.collection('app_config').doc('access_control').onSnapshot((doc) => {
         if (doc.exists) {
-          window.appAccessConfig = { ...getDefaultAccessConfig(), ...doc.data() };
+          const def = getDefaultAccessConfig();
+          const remote = doc.data();
+          window.appAccessConfig = {
+            ...def,
+            ...remote,
+            pages: { ...def.pages, ...(remote.pages || {}) }
+          };
         } else {
           window.appAccessConfig = getDefaultAccessConfig();
         }
         applyAccessControlToNav();
-        if (window.currentTab === 'admin' && typeof renderAdminPageControls === 'function') {
-          renderAdminPageControls();
-        }
       }, (err) => console.warn('Config snapshot error:', err.message));
+    }
+
+    function closeAllOperationalModals() {
+      [
+        'modalAddProduct', 'modalAddContact', 'modalCreditNote', 'modalCheckAction',
+        'modalAddVehicle', 'receiptModal', 'purchaseModal', 'dispatchModal',
+        'completeDeliveryModal', 'deliveryNotePdfModal', 'newExpenseModal',
+        'expenseVoucherPdfModal', 'modalAddCheck'
+      ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+      ['purchasePdfModal', 'statementPdfModal', 'receiptPdfModal', 'checkPdfModal', 'salesInvoicePdfModal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
     }
 
     function switchTab(tab) {
@@ -2190,7 +2212,9 @@
           if (t === 'admin') {
             tabEl.className = (window.currentUserProfile?.role === 'super_admin' ? '' : 'hidden ') + 'tab-btn px-4 py-2.5 rounded-xl font-medium text-[#C5A059] hover:text-black hover:bg-[#C5A059] bg-[#1E1E24] border border-[#C5A059]/40 transition flex items-center gap-2';
           } else {
-            tabEl.className = 'tab-btn px-4 py-2.5 rounded-xl font-medium text-gray-300 hover:text-white bg-[#1E1E24] hover:bg-[#25252D] border border-transparent transition flex items-center gap-2';
+            const pAccess = canAccessPage(t);
+            const dimClass = (!pAccess.allowed || pAccess.inactiveForStaff) ? ' opacity-70' : '';
+            tabEl.className = 'tab-btn px-4 py-2.5 rounded-xl font-medium text-gray-300 hover:text-white bg-[#1E1E24] hover:bg-[#25252D] border border-transparent transition flex items-center gap-2' + dimClass;
           }
         }
       });
@@ -2199,6 +2223,7 @@
       const previewBanner = document.getElementById('superAdminPreviewBanner');
 
       if (!access.allowed) {
+        closeAllOperationalModals();
         if (previewBanner) previewBanner.classList.add('hidden');
         const lockedView = document.getElementById('view-locked');
         if (lockedView) lockedView.classList.remove('hidden');
@@ -4559,12 +4584,23 @@
       }
     }
 
-    async function handleLogout() {
+    function resetAuthReadyPromise() {
+      window._authReady = new Promise((resolve) => {
+        window._resolveAuthReady = resolve;
+      });
+    }
+
+    async function handleLogout(silent) {
       if (window._userUnsub) { window._userUnsub(); window._userUnsub = null; }
       if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
       window.currentUserProfile = null;
+      window.currentTab = 'dashboard';
+      closeAllOperationalModals();
+      const passInput = document.getElementById('loginPassword');
+      if (passInput) passInput.value = '';
+      resetAuthReadyPromise();
       await window.mirnAuth.signOut();
-      showToast('تم تسجيل الخروج بنجاح');
+      if (!silent) showToast('تم تسجيل الخروج بنجاح');
     }
 
     function updateHeaderForUser(profile) {
@@ -4586,6 +4622,11 @@
 
         if (!user) {
           window.currentUserProfile = null;
+          window.currentTab = 'dashboard';
+          closeAllOperationalModals();
+          const passInput = document.getElementById('loginPassword');
+          if (passInput) passInput.value = '';
+          resetAuthReadyPromise();
           if (window._userUnsub) { window._userUnsub(); window._userUnsub = null; }
           if (window._configUnsub) { window._configUnsub(); window._configUnsub = null; }
           if (appShell) appShell.classList.add('hidden');
@@ -4613,8 +4654,9 @@
           if (typeof startAccessListeners === 'function') {
             startAccessListeners(user.uid);
           }
+          switchTab('dashboard');
           await loadFirestoreData().catch(err => console.warn('Firestore data load:', err.message));
-          writeAuditLog('login', user.email, 'User signed in (' + profile.role + ')');
+          await writeAuditLog('login', user.email, 'User signed in (' + profile.role + ')');
         } catch (err) {
           console.error('Auth state verification error:', err);
           showLoginError('تعذر التحقق من صلاحيات الحساب: ' + err.message);
@@ -4654,51 +4696,110 @@
         });
         rows.sort((a, b) => (a.role === 'super_admin' ? -1 : b.role === 'super_admin' ? 1 : (a.name || '').localeCompare(b.name || '')));
 
+        tbody.textContent = '';
         if (rows.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">لا يوجد مستخدمون مسجلون</td></tr>';
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = 5;
+          td.className = 'py-4 text-center text-gray-500';
+          td.textContent = 'لا يوجد مستخدمون مسجلون';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
           return;
         }
 
-        tbody.innerHTML = rows.map(u => {
+        rows.forEach(u => {
           const isSuper = u.role === 'super_admin';
-          const roleOptions = STAFF_ROLE_LIST.map(r =>
-            `<option value="${r.value}" ${u.role === r.value ? 'selected' : ''}>${r.label}</option>`
-          ).join('');
-          const statusBadge = u.active
-            ? '<span class="px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-bold">نشط / Active</span>'
-            : '<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold">معطل / Disabled</span>';
+          const tr = document.createElement('tr');
 
-          return `
-            <tr>
-              <td class="py-2.5 px-3 font-bold text-white">${u.name || '-'}</td>
-              <td class="py-2.5 px-3 font-mono text-gray-300" dir="ltr">${u.email || '-'}</td>
-              <td class="py-2.5 px-3">
-                ${isSuper
-                  ? '<span class="px-2.5 py-1 rounded bg-[#C5A059]/20 text-[#C5A059] font-bold">SUPER ADMIN</span>'
-                  : `<select onchange="adminUpdateUserRole('${u.uid}', this.value)" class="bg-[#25252D] border border-[#33333E] rounded-lg px-2 py-1 text-white text-xs outline-none">${roleOptions}</select>`}
-              </td>
-              <td class="py-2.5 px-3">${statusBadge}</td>
-              <td class="py-2.5 px-3 text-center">
-                ${isSuper
-                  ? '<span class="text-gray-500 text-[11px]">محمي</span>'
-                  : `<div class="flex items-center justify-center gap-1.5 flex-wrap">
-                      <button onclick="adminToggleUserActive('${u.uid}', ${!u.active})" class="px-2.5 py-1 rounded-lg ${u.active ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'} font-semibold text-[11px]">
-                        ${u.active ? 'تعطيل' : 'تفعيل'}
-                      </button>
-                      <button onclick="adminSendPasswordReset('${u.email}')" class="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-semibold text-[11px]">
-                        🔑 إعادة كلمة مرور
-                      </button>
-                      <button onclick="adminSoftRemoveUser('${u.uid}', '${u.email}')" class="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-[11px]">
-                        🗑️ إزالة
-                      </button>
-                    </div>`}
-              </td>
-            </tr>
-          `;
-        }).join('');
+          const tdName = document.createElement('td');
+          tdName.className = 'py-2.5 px-3 font-bold text-white';
+          tdName.textContent = u.name || '-';
+          tr.appendChild(tdName);
+
+          const tdEmail = document.createElement('td');
+          tdEmail.className = 'py-2.5 px-3 font-mono text-gray-300';
+          tdEmail.dir = 'ltr';
+          tdEmail.textContent = u.email || '-';
+          tr.appendChild(tdEmail);
+
+          const tdRole = document.createElement('td');
+          tdRole.className = 'py-2.5 px-3';
+          if (isSuper) {
+            const sp = document.createElement('span');
+            sp.className = 'px-2.5 py-1 rounded bg-[#C5A059]/20 text-[#C5A059] font-bold';
+            sp.textContent = 'SUPER ADMIN';
+            tdRole.appendChild(sp);
+          } else {
+            const sel = document.createElement('select');
+            sel.className = 'bg-[#25252D] border border-[#33333E] rounded-lg px-2 py-1 text-white text-xs outline-none';
+            STAFF_ROLE_LIST.forEach(r => {
+              const opt = document.createElement('option');
+              opt.value = r.value;
+              opt.textContent = r.label;
+              if (u.role === r.value) opt.selected = true;
+              sel.appendChild(opt);
+            });
+            sel.addEventListener('change', () => adminUpdateUserRole(u.uid, sel.value));
+            tdRole.appendChild(sel);
+          }
+          tr.appendChild(tdRole);
+
+          const tdStatus = document.createElement('td');
+          tdStatus.className = 'py-2.5 px-3';
+          const badge = document.createElement('span');
+          badge.className = u.active
+            ? 'px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-bold'
+            : 'px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold';
+          badge.textContent = u.active ? 'نشط / Active' : 'معطل / Disabled';
+          tdStatus.appendChild(badge);
+          tr.appendChild(tdStatus);
+
+          const tdActions = document.createElement('td');
+          tdActions.className = 'py-2.5 px-3 text-center';
+          if (isSuper) {
+            const prot = document.createElement('span');
+            prot.className = 'text-gray-500 text-[11px]';
+            prot.textContent = 'محمي';
+            tdActions.appendChild(prot);
+          } else {
+            const wrap = document.createElement('div');
+            wrap.className = 'flex items-center justify-center gap-1.5 flex-wrap';
+
+            const btnToggle = document.createElement('button');
+            btnToggle.className = 'px-2.5 py-1 rounded-lg font-semibold text-[11px] ' +
+              (u.active ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-green-500/20 text-green-300 hover:bg-green-500/30');
+            btnToggle.textContent = u.active ? 'تعطيل' : 'تفعيل';
+            btnToggle.addEventListener('click', () => adminToggleUserActive(u.uid, !u.active));
+            wrap.appendChild(btnToggle);
+
+            const btnReset = document.createElement('button');
+            btnReset.className = 'px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-semibold text-[11px]';
+            btnReset.textContent = '🔑 إعادة كلمة مرور';
+            btnReset.addEventListener('click', () => adminSendPasswordReset(u.email));
+            wrap.appendChild(btnReset);
+
+            const btnRem = document.createElement('button');
+            btnRem.className = 'px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-[11px]';
+            btnRem.textContent = '🗑️ إزالة';
+            btnRem.addEventListener('click', () => adminSoftRemoveUser(u.uid, u.email));
+            wrap.appendChild(btnRem);
+
+            tdActions.appendChild(wrap);
+          }
+          tr.appendChild(tdActions);
+          tbody.appendChild(tr);
+        });
       } catch (err) {
         console.error('loadAdminUsers error:', err);
-        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-red-400">خطأ في تحميل المستخدمين: ' + err.message + '</td></tr>';
+        tbody.textContent = '';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 5;
+        td.className = 'py-4 text-center text-red-400';
+        td.textContent = 'خطأ في تحميل المستخدمين: ' + (err.message || err);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
       }
     }
 
@@ -4879,6 +4980,7 @@
         await window.mirnDb.collection('app_config').doc('access_control').set(newCfg, { merge: true });
         await writeAuditLog('access_config_updated', 'app_config/access_control', 'Updated page toggles & messages');
         showToast('✅ تم حفظ إعدادات الصفحات والرسائل وتطبيقها فوراً!');
+        await loadAdminAuditLogs();
       } catch (err) {
         showToast('❌ فشل حفظ الإعدادات: ' + err.message);
       }
@@ -4890,28 +4992,63 @@
       if (!tbody) return;
       try {
         const snap = await window.mirnDb.collection('audit_logs').orderBy('timestamp', 'desc').limit(50).get();
+        tbody.textContent = '';
         if (snap.empty) {
-          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">لا توجد سجلات نشاط بعد</td></tr>';
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = 5;
+          td.className = 'py-4 text-center text-gray-500';
+          td.textContent = 'لا توجد سجلات نشاط بعد';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
           return;
         }
-        const rows = [];
         snap.forEach(doc => {
           const l = doc.data();
           const dt = l.timestamp && l.timestamp.toDate ? l.timestamp.toDate().toLocaleString() : '-';
-          rows.push(`
-            <tr>
-              <td class="py-2 px-3 font-mono text-gray-400 text-[11px]">${dt}</td>
-              <td class="py-2 px-3 font-mono text-gray-300" dir="ltr">${l.actorEmail || '-'}</td>
-              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-[#C5A059]/15 text-[#C5A059] font-mono text-[10px]">${l.action || '-'}</span></td>
-              <td class="py-2 px-3 text-white font-mono text-[11px]">${l.target || '-'}</td>
-              <td class="py-2 px-3 text-gray-300">${l.details || '-'}</td>
-            </tr>
-          `);
+          const tr = document.createElement('tr');
+
+          const tdTime = document.createElement('td');
+          tdTime.className = 'py-2 px-3 font-mono text-gray-400 text-[11px]';
+          tdTime.textContent = dt;
+          tr.appendChild(tdTime);
+
+          const tdActor = document.createElement('td');
+          tdActor.className = 'py-2 px-3 font-mono text-gray-300';
+          tdActor.dir = 'ltr';
+          tdActor.textContent = l.actorEmail || '-';
+          tr.appendChild(tdActor);
+
+          const tdAction = document.createElement('td');
+          tdAction.className = 'py-2 px-3';
+          const badge = document.createElement('span');
+          badge.className = 'px-2 py-0.5 rounded bg-[#C5A059]/15 text-[#C5A059] font-mono text-[10px]';
+          badge.textContent = l.action || '-';
+          tdAction.appendChild(badge);
+          tr.appendChild(tdAction);
+
+          const tdTarget = document.createElement('td');
+          tdTarget.className = 'py-2 px-3 text-white font-mono text-[11px]';
+          tdTarget.textContent = l.target || '-';
+          tr.appendChild(tdTarget);
+
+          const tdDetails = document.createElement('td');
+          tdDetails.className = 'py-2 px-3 text-gray-300';
+          tdDetails.textContent = l.details || '-';
+          tr.appendChild(tdDetails);
+
+          tbody.appendChild(tr);
         });
-        tbody.innerHTML = rows.join('');
       } catch (err) {
         console.warn('loadAdminAuditLogs error:', err);
-        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-red-400">تعذر تحميل السجل: ' + err.message + '</td></tr>';
+        tbody.textContent = '';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 5;
+        td.className = 'py-4 text-center text-red-400';
+        td.textContent = 'تعذر تحميل السجل: ' + (err.message || err);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
       }
     }
 

@@ -15,13 +15,15 @@ service cloud.firestore {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('removed', false) != true;
     }
 
     function isActiveUser() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('removed', false) != true;
     }
 
     function isPositive(num) {
@@ -38,8 +40,8 @@ service cloud.firestore {
 
     // 1. Products: Dual-unit catalog, non-negative stock
     match /products/{productId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() &&
         request.resource.data.name is string &&
         request.resource.data.name.size() > 0 &&
         isNonNegative(request.resource.data.purchaseCost) &&
@@ -50,8 +52,8 @@ service cloud.firestore {
 
     // 2. Contacts: Customer & Supplier ledger master records
     match /contacts/{contactId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() &&
         request.resource.data.name is string &&
         request.resource.data.name.size() > 0 &&
         request.resource.data.phone is string &&
@@ -61,8 +63,8 @@ service cloud.firestore {
 
     // 3. Sales Invoices: Israeli Tax Invoices (חשבונית מס)
     match /sales/{saleId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.invoiceNumber is string &&
         isPositive(request.resource.data.totalAmount) &&
         hasValidVat(request.resource.data) &&
@@ -72,8 +74,8 @@ service cloud.firestore {
 
     // 4. Sales Returns: Credit Notes (חשבונית זיכוי)
     match /credit_notes/{creditNoteId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.creditNoteNumber is string &&
         isPositive(request.resource.data.totalAmount) &&
         hasValidVat(request.resource.data);
@@ -82,13 +84,13 @@ service cloud.firestore {
 
     // 5. Checks: Check Portfolio with 6-stage clearing lifecycle
     match /checks/{checkId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.checkNumber is string &&
         isPositive(request.resource.data.amount) &&
         request.resource.data.bankName is string &&
         request.resource.data.status == 'pending';
-      allow update: if isAuthenticated() &&
+      allow update: if isActiveUser() &&
         request.resource.data.status in ['pending', 'deposited', 'cleared', 'bounced', 'returned', 'endorsed'] &&
         request.resource.data.amount == resource.data.amount &&
         request.resource.data.checkNumber == resource.data.checkNumber &&
@@ -98,8 +100,8 @@ service cloud.firestore {
 
     // 6. Purchases: Supplier Stock Intake & Invoices
     match /purchases/{purchaseId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.invoiceNumber is string &&
         isPositive(request.resource.data.totalAmount) &&
         request.resource.data.items.size() > 0;
@@ -108,8 +110,8 @@ service cloud.firestore {
 
     // 7. Dispatches: Fleet Deliveries & Logistics
     match /dispatches/{dispatchId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() &&
         request.resource.data.dispatchNumber is string &&
         request.resource.data.deliveryAddress is string &&
         request.resource.data.cargoDescription is string &&
@@ -119,8 +121,8 @@ service cloud.firestore {
 
     // 8. Expenses: Fleet Operations & Expense Vouchers
     match /expenses/{expenseId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.expenseNumber is string &&
         isPositive(request.resource.data.amount) &&
         request.resource.data.description is string &&
@@ -130,8 +132,8 @@ service cloud.firestore {
 
     // 9. Statement Entries: Running Ledger (كشف حساب) - STRICTLY IMMUTABLE AUDIT TRAIL
     match /statement_entries/{entryId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.contactId is string &&
         request.resource.data.referenceNumber is string &&
         isNonNegative(request.resource.data.debit) &&
@@ -141,11 +143,11 @@ service cloud.firestore {
 
     // 10. Document Sequence Counters: Atomic Sequential Numbering
     match /counters/{counterId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isActiveUser();
+      allow create: if isActiveUser() &&
         request.resource.data.currentSeq is int &&
         request.resource.data.currentSeq >= 0;
-      allow update: if isAuthenticated() &&
+      allow update: if isActiveUser() &&
         request.resource.data.currentSeq is int &&
         request.resource.data.currentSeq > resource.data.currentSeq; // Monotonic only
       allow delete: if false;
@@ -156,21 +158,36 @@ service cloud.firestore {
       allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
       allow create: if (isAllowlistedSuperAdmin() && request.auth.uid == userId && request.resource.data.role == 'super_admin') ||
         (isSuperAdmin() && request.resource.data.role != 'super_admin');
-      allow update: if isSuperAdmin() && (userId == request.auth.uid || request.resource.data.role != 'super_admin');
+      allow update: if isSuperAdmin() && (
+        (userId == request.auth.uid && request.resource.data.role == 'super_admin' && request.resource.data.active == true && request.resource.data.get('removed', false) != true) ||
+        (userId != request.auth.uid && request.resource.data.role != 'super_admin')
+      );
       allow delete: if false;
     }
 
     // 12. App Access Control Config (Page toggles, role matrix, locked messages)
     match /app_config/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser();
       allow write: if isSuperAdmin();
     }
 
-    // 13. Audit Logs (Append-only, Super Admin read-only)
+    // 13. Audit Logs (Append-only, Super Admin read-only, actor verified)
     match /audit_logs/{logId} {
       allow read: if isSuperAdmin();
-      allow create: if isAuthenticated();
+      allow create: if isActiveUser() &&
+        request.resource.data.actorUid == request.auth.uid &&
+        request.resource.data.actorEmail == request.auth.token.email;
       allow update, delete: if false;
+    }
+
+    // 14. Vehicles & Receipts (Active staff only)
+    match /vehicles/{vehicleId} {
+      allow read, create, update: if isActiveUser();
+      allow delete: if false;
+    }
+    match /receipts/{receiptId} {
+      allow read, create, update: if isActiveUser();
+      allow delete: if false;
     }
   }
 }
