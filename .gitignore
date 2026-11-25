@@ -1,5 +1,6 @@
 # Superpowers SDD artifacts
 .superpowers/
+.worktrees/
 
 # Miscellaneous
 *.class
