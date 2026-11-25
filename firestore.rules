@@ -7,6 +7,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAllowlistedSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'dia81994@gmail.com';
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
     function isPositive(num) {
       return num is number && num > 0;
     }
@@ -134,10 +151,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // 11. User Profiles & Roles
+    // 11. User Profiles & Roles (Exclusive Super Admin control)
     match /users/{userId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow create: if (isAllowlistedSuperAdmin() && request.auth.uid == userId && request.resource.data.role == 'super_admin') ||
+        (isSuperAdmin() && request.resource.data.role != 'super_admin');
+      allow update: if isSuperAdmin() && (userId == request.auth.uid || request.resource.data.role != 'super_admin');
+      allow delete: if false;
+    }
+
+    // 12. App Access Control Config (Page toggles, role matrix, locked messages)
+    match /app_config/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isSuperAdmin();
+    }
+
+    // 13. Audit Logs (Append-only, Super Admin read-only)
+    match /audit_logs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
   }
 }
